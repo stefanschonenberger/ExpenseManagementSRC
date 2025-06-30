@@ -1,59 +1,113 @@
 // src/email/email.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as nodemailer from 'nodemailer';
+import { HttpService } from '@nestjs/axios';
+import { firstValueFrom } from 'rxjs';
 import { ExpenseReport } from 'src/expense-report/entities/expense-report.entity';
 import { User } from 'src/user/entities/user.entity';
 
 @Injectable()
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
-  private transporter: nodemailer.Transporter;
+  private accessToken: string | null = null;
+  private tokenExpiryTime: number = 0;
 
-  constructor(private readonly configService: ConfigService) {
-    const tenantId = this.configService.get('O365_TENANT_ID');
-    const senderEmail = this.configService.get('O365_SENDER_EMAIL');
-
-    this.transporter = nodemailer.createTransport({
-      host: 'smtp.office365.com',
-      port: 587,
-      secure: false, // TLS requires secure:false for port 587
-      auth: {
-        type: 'OAuth2',
-        user: senderEmail,
-        clientId: this.configService.get('O365_CLIENT_ID'),
-        clientSecret: this.configService.get('O365_CLIENT_SECRET'),
-        refreshToken: this.configService.get('O365_REFRESH_TOKEN'),
-        // --- Added Tenant-Specific Token URL ---
-        // This directs the OAuth2 request to your specific organization's
-        // authentication endpoint, which is often required.
-        accessUrl: `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`,
-        // ----------------------------------------
-      },
-      // --- Tracing Options ---
-      logger: true, 
-      debug: true, 
-    });
-
-    this.logger.log('EmailService initialized with Nodemailer transporter for Office 365.');
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly httpService: HttpService,
+  ) {
+    this.logger.log('EmailService initialized to use Microsoft Graph API.');
   }
 
-  private async sendMail(to: string, subject: string, html: string) {
-    const mailOptions = {
-        from: this.configService.get('O365_SENDER_EMAIL'),
-        to,
-        subject,
-        html,
+  /**
+   * Gets a valid OAuth2 access token for the Microsoft Graph API.
+   * Uses the client credentials flow (server-to-server).
+   * It will cache the token until it expires.
+   */
+  private async getAccessToken(): Promise<string> {
+    const cachedToken = this.accessToken;
+    // By assigning the class property to a local const, we make it easier
+    // for TypeScript's control flow analysis to track the type.
+    if (cachedToken && Date.now() < this.tokenExpiryTime) {
+      this.logger.log('Returning cached Graph API access token.');
+      return cachedToken;
+    }
+
+    this.logger.log('Fetching new Graph API access token...');
+    const tenantId = this.configService.get('O365_TENANT_ID');
+    const clientId = this.configService.get('O365_CLIENT_ID');
+    const clientSecret = this.configService.get('O365_CLIENT_SECRET');
+    const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+
+    const params = new URLSearchParams();
+    params.append('client_id', clientId);
+    params.append('scope', 'https://graph.microsoft.com/.default');
+    params.append('client_secret', clientSecret);
+    params.append('grant_type', 'client_credentials');
+
+    try {
+      const response = await firstValueFrom(
+        this.httpService.post(tokenUrl, params, {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        }),
+      );
+
+      this.accessToken = response.data.access_token;
+      // Set expiry to 60 seconds before it actually expires to be safe
+      this.tokenExpiryTime = Date.now() + (response.data.expires_in - 60) * 1000;
+      
+      this.logger.log('Successfully fetched new Graph API access token.');
+      return this.accessToken;
+    } catch (error) {
+      this.logger.error('Failed to get Graph API access token.', error.response?.data || error.message);
+      throw new Error('Could not authenticate with Microsoft Graph.');
+    }
+  }
+
+  /**
+   * Sends an email using the Microsoft Graph API /sendMail endpoint.
+   * @param to The recipient's email address.
+   * @param subject The email subject.
+   * @param html The HTML body of the email.
+   */
+  private async sendMail(to: string, subject: string, html: string): Promise<void> {
+    const senderEmail = this.configService.get('O365_SENDER_EMAIL');
+    const url = `https://graph.microsoft.com/v1.0/users/${senderEmail}/sendMail`;
+
+    const emailPayload = {
+      message: {
+        subject: subject,
+        body: {
+          contentType: 'HTML',
+          content: html,
+        },
+        toRecipients: [
+          {
+            emailAddress: {
+              address: to,
+            },
+          },
+        ],
+      },
+      saveToSentItems: 'true',
     };
 
     try {
-      this.logger.log(`Attempting to send email to ${to} with subject "${subject}"`);
-      const info = await this.transporter.sendMail(mailOptions);
-      this.logger.log('Email sent successfully!');
-      this.logger.debug('Nodemailer transport response: ' + info.response);
+      const token = await this.getAccessToken();
+      this.logger.log(`Attempting to send email via Graph API to ${to} with subject "${subject}"`);
+
+      await firstValueFrom(
+        this.httpService.post(url, emailPayload, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }),
+      );
+
+      this.logger.log(`Email successfully sent to ${to} via Graph API.`);
     } catch (error) {
-      this.logger.error(`Failed to send email to ${to}. See debug logs above for details.`, error.stack);
-      // throw error; 
+      this.logger.error(`Failed to send email via Graph API to ${to}.`, error.response?.data || error.message);
     }
   }
 
