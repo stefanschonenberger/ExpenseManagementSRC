@@ -1,38 +1,73 @@
-// ==========================================================
-// File: src/components/ui/Toast.tsx
-// Create this new component for the notification UI.
-// Create the 'ui' folder if it doesn't exist.
-// ==========================================================
+// frontend/src/components/ui/Toast.tsx
 'use client';
-import { useToastStore } from '@/lib/toastStore';
-import { CheckCircle, XCircle, Info, X } from 'lucide-react';
 
-export default function Toast() {
-  const { message, type, isVisible, hideToast } = useToastStore();
+import { useEffect } from 'react';
+import { X, CheckCircle, XCircle, Info } from 'lucide-react';
 
-  if (!isVisible) return null;
+const Toast = ({
+  message,
+  type,
+  onClose,
+}: {
+  message: string;
+  type: 'success' | 'error' | 'info';
+  onClose: () => void;
+}) => {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onClose();
+    }, 5000);
 
-  const toastStyles = {
-    success: 'bg-green-100 border-green-500 text-green-700',
-    error: 'bg-red-100 border-red-500 text-red-700',
-    info: 'bg-blue-100 border-blue-500 text-blue-700',
-  };
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [onClose]);
 
-  const Icon = {
-    success: <CheckCircle className="w-6 h-6" />,
-    error: <XCircle className="w-6 h-6" />,
-    info: <Info className="w-6 h-6" />,
+  const typeStyles = {
+    success: {
+      bgColor: 'bg-green-100',
+      borderColor: 'border-green-400',
+      textColor: 'text-green-800',
+      icon: <CheckCircle className="h-5 w-5 text-green-500" />,
+    },
+    error: {
+      bgColor: 'bg-red-100',
+      borderColor: 'border-red-400',
+      textColor: 'text-red-800',
+      icon: <XCircle className="h-5 w-5 text-red-500" />,
+    },
+    info: {
+      bgColor: 'bg-blue-100',
+      borderColor: 'border-blue-400',
+      textColor: 'text-blue-800',
+      icon: <Info className="h-5 w-5 text-blue-500" />,
+    },
   }[type];
 
   return (
-    <div className={`fixed bottom-5 right-5 z-50 p-4 border-l-4 rounded-md shadow-lg flex items-center ${toastStyles[type]}`}>
-      <div className="flex-shrink-0">{Icon}</div>
-      <div className="ml-3">
-        <p className="text-sm font-medium">{message}</p>
+    <div
+      className={`fixed bottom-5 right-5 z-50 max-w-sm w-full rounded-lg shadow-lg border-l-4 ${typeStyles.borderColor} ${typeStyles.bgColor} p-4 animate-fade-in-up`}
+      role="alert"
+    >
+      <div className="flex items-start">
+        <div className="flex-shrink-0">{typeStyles.icon}</div>
+        <div className="ml-3 flex-1 pt-0.5">
+          <p className={`text-sm font-medium ${typeStyles.textColor}`}>
+            {message}
+          </p>
+        </div>
+        <div className="ml-4 flex-shrink-0 flex">
+          <button
+            onClick={onClose}
+            className={`inline-flex rounded-md p-1 ${typeStyles.textColor} hover:bg-black/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-${type}-100 focus:ring-${type}-500`}
+          >
+            <span className="sr-only">Close</span>
+            <X size={18} />
+          </button>
+        </div>
       </div>
-      <button onClick={hideToast} className="ml-auto -mx-1.5 -my-1.5 p-1.5 rounded-lg focus:ring-2 inline-flex h-8 w-8">
-        <X className="w-5 h-5" />
-      </button>
     </div>
   );
-}
+};
+
+export { Toast };
