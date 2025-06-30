@@ -25,12 +25,9 @@ export class EmailService {
    * It will cache the token until it expires.
    */
   private async getAccessToken(): Promise<string> {
-    const cachedToken = this.accessToken;
-    // By assigning the class property to a local const, we make it easier
-    // for TypeScript's control flow analysis to track the type.
-    if (cachedToken && Date.now() < this.tokenExpiryTime) {
+    if (this.accessToken && Date.now() < this.tokenExpiryTime) {
       this.logger.log('Returning cached Graph API access token.');
-      return cachedToken;
+      return this.accessToken;
     }
 
     this.logger.log('Fetching new Graph API access token...');
@@ -52,12 +49,21 @@ export class EmailService {
         }),
       );
 
-      this.accessToken = response.data.access_token;
-      // Set expiry to 60 seconds before it actually expires to be safe
-      this.tokenExpiryTime = Date.now() + (response.data.expires_in - 60) * 1000;
+      const newAccessToken = response.data.access_token;
       
-      this.logger.log('Successfully fetched new Graph API access token.');
-      return this.accessToken;
+      // Explicitly check if the token is a non-empty string.
+      if (typeof newAccessToken === 'string' && newAccessToken.length > 0) {
+        this.accessToken = newAccessToken;
+        // Set expiry to 60 seconds before it actually expires to be safe
+        this.tokenExpiryTime = Date.now() + (response.data.expires_in - 60) * 1000;
+        
+        this.logger.log('Successfully fetched new Graph API access token.');
+        return this.accessToken;
+      } else {
+        // This handles cases where the API call succeeds but returns an empty or invalid token.
+        throw new Error('Received an invalid access token from Microsoft Graph.');
+      }
+
     } catch (error) {
       this.logger.error('Failed to get Graph API access token.', error.response?.data || error.message);
       throw new Error('Could not authenticate with Microsoft Graph.');
