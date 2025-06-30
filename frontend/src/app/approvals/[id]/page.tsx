@@ -31,12 +31,70 @@ export default function ApprovalDetailPage() {
   const token = useAuthStore((state) => state.token);
   const showToast = useToastStore((state) => state.showToast);
 
-  const fetchReportDetails = useCallback(async () => { /* ... (unchanged) ... */ }, [token, reportId]);
-  useEffect(() => { fetchReportDetails(); }, [fetchReportDetails]);
+  const fetchReportDetails = useCallback(async () => {
+    if (!token || !reportId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await api.get(`/expense-report/approval/${reportId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setReport(response.data);
+    } catch (err) {
+      setError('Failed to fetch report details.');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [token, reportId]);
 
-  const handleApprove = async () => { /* ... (unchanged) ... */ };
-  const handleReject = async (reason: string) => { /* ... (unchanged) ... */ };
-  const handleViewReceipt = async (blobId: string) => { /* ... (unchanged) ... */ };
+  useEffect(() => {
+    fetchReportDetails();
+  }, [fetchReportDetails]);
+
+  const handleApprove = async () => {
+    if (!token || !reportId) return;
+    try {
+      await api.post(`/expense-report/${reportId}/approve`, {}, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      showToast('Report approved successfully!', 'success');
+      router.push('/approvals');
+    } catch (err) {
+      showToast('Failed to approve report.', 'error');
+      console.error(err);
+    }
+  };
+
+  const handleReject = async (reason: string) => {
+    if (!token || !reportId) return;
+    try {
+      await api.post(`/expense-report/${reportId}/reject`, { reason }, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      showToast('Report rejected successfully!', 'success');
+      router.push('/approvals');
+    } catch (err) {
+      showToast('Failed to reject report.', 'error');
+      console.error(err);
+    }
+  };
+
+  const handleViewReceipt = async (blobId: string) => {
+    if (!token) return;
+    try {
+      const response = await api.get(`/blob/${blobId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'arraybuffer',
+      });
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (error) {
+      console.error('Error fetching receipt:', error);
+      showToast('Could not display receipt.', 'error');
+    }
+  };
 
   if (loading) return <p>Loading report details...</p>;
   if (error) return <p className="text-danger">{error}</p>;
