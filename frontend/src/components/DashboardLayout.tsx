@@ -1,15 +1,16 @@
-// src/components/DashboardLayout.tsx
 'use client';
 
 import { useAuthStore } from '@/lib/store';
-import { LayoutDashboard, Receipt, ClipboardList, ClipboardCheck, Shield } from 'lucide-react';
+import { LayoutDashboard, Receipt, ClipboardList, ClipboardCheck, Shield, UserCircle } from 'lucide-react'; // 1. Import UserCircle icon
 import Link from 'next/link';
 import Header from './Header';
 
+// 2. Add "My Profile" to the navigation array
 const employeeNavigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'My Expenses', href: '/expenses', icon: Receipt },
   { name: 'My Reports', href: '/reports', icon: ClipboardList },
+  { name: 'My Profile', href: '/profile', icon: UserCircle },
 ];
 const managerNavigation = [ { name: 'Approvals', href: '/approvals', icon: ClipboardCheck } ];
 const adminNavigation = [ { name: 'Admin Panel', href: '/admin', icon: Shield } ];
@@ -20,7 +21,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex w-full h-full bg-gray-100">
-      {/* FIX: The responsive classes 'hidden' and 'md:block' have been removed to ensure the sidebar is always visible. */}
       <aside className="flex-shrink-0 w-64 p-4 space-y-4 bg-white border-r">
         <div className="text-2xl font-bold text-primary">ExpenseBeast</div>
         <nav className="space-y-2">
