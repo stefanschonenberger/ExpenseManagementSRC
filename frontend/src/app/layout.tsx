@@ -9,8 +9,8 @@ import BrandedFooter from '@/components/BrandedFooter';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Expense Beast',
-  description: 'Tame your expense reports.',
+  title: 'Expense Management',
+  description: 'Management your expense reports.',
 };
 
 export default function RootLayout({

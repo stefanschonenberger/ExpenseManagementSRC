@@ -22,7 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex w-full h-full bg-gray-100">
       <aside className="flex-shrink-0 w-64 p-4 space-y-4 bg-white border-r">
-        <div className="text-2xl font-bold text-primary">ExpenseBeast</div>
+        <div className="text-xl font-bold text-primary">Expense Management</div>
         <nav className="space-y-2">
           <h3 className="px-3 pt-4 text-xs font-semibold text-gray-500 uppercase">My Workspace</h3>
           {employeeNavigation.map((item) => (
