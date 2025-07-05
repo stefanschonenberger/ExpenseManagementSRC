@@ -1,7 +1,3 @@
-// ==========================================================
-// File: src/admin/entities/admin-settings.entity.ts
-// Add the new timeout property to this entity.
-// ==========================================================
 import { Column, Entity, PrimaryColumn, UpdateDateColumn } from 'typeorm';
 
 @Entity({ name: 'admin_settings' })
@@ -15,9 +11,12 @@ export class AdminSettings {
     @Column('decimal', { precision: 5, scale: 4, default: 0.15 })
     vat_rate: number;
     
-    // New property for the timeout in minutes
     @Column({ type: 'int', default: 30 })
     inactivity_timeout_minutes: number;
+
+    // New field for the finance department's email address
+    @Column({ type: 'varchar', length: 255, nullable: true })
+    finance_email: string;
     
     @UpdateDateColumn()
     updated_at: Date;

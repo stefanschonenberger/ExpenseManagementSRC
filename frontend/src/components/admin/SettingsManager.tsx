@@ -1,9 +1,8 @@
-// src/components/admin/SettingsManager.tsx
 'use client';
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { useSettingsStore } from '@/lib/settingsStore'; // Import the settings store
+import { useSettingsStore } from '@/lib/settingsStore';
 import { X } from 'lucide-react';
 
 export default function SettingsManager({ settings, onDataChange }: any) {
@@ -11,14 +10,16 @@ export default function SettingsManager({ settings, onDataChange }: any) {
     const [expenseTypes, setExpenseTypes] = useState<string[]>([]);
     const [newType, setNewType] = useState('');
     const [timeoutMinutes, setTimeoutMinutes] = useState(30);
+    const [financeEmail, setFinanceEmail] = useState(''); // State for the new field
     const token = useAuthStore(state => state.token);
-    const fetchSettings = useSettingsStore(state => state.fetchSettings); // Get the fetch function from the store
+    const fetchSettings = useSettingsStore(state => state.fetchSettings);
 
     useEffect(() => {
         if (settings) {
             setVatRate(settings.vat_rate * 100);
             setExpenseTypes(settings.expense_types || []);
             setTimeoutMinutes(settings.inactivity_timeout_minutes || 30);
+            setFinanceEmail(settings.finance_email || ''); // Pre-fill the new field
         }
     }, [settings]);
 
@@ -28,11 +29,11 @@ export default function SettingsManager({ settings, onDataChange }: any) {
                 vat_rate: vatRate / 100,
                 expense_types: expenseTypes,
                 inactivity_timeout_minutes: timeoutMinutes,
+                finance_email: financeEmail, // Include the new field in the payload
             }, { headers: { Authorization: `Bearer ${token}` } });
             
-            // FIX: After saving, explicitly tell the global stores to refetch the data.
-            onDataChange(); // Refreshes the admin page data
-            fetchSettings(); // Refreshes the global settings for the timeout hook
+            onDataChange();
+            fetchSettings();
             
             alert("Settings saved successfully!");
         } catch (error) {
@@ -56,6 +57,10 @@ export default function SettingsManager({ settings, onDataChange }: any) {
         <div className="p-6 bg-white rounded-lg shadow">
             <h2 className="mb-4 text-xl font-semibold text-gray-800">System Settings</h2>
             <div className="space-y-4">
+                <div>
+                    <label className="block text-sm font-medium">Finance Department Email</label>
+                    <input type="email" value={financeEmail} onChange={e => setFinanceEmail(e.target.value)} placeholder="finance@example.com" className="w-full p-2 border rounded" />
+                </div>
                 <div>
                     <label className="block text-sm font-medium">VAT Rate (%)</label>
                     <input type="number" value={vatRate} onChange={e => setVatRate(parseFloat(e.target.value))} className="w-full p-2 border rounded" />

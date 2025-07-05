@@ -1,7 +1,3 @@
-// ==========================================================
-// File: src/app/reports/[id]/page.tsx
-// This is the complete and corrected version of the file.
-// ==========================================================
 'use client';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -31,11 +27,57 @@ export default function ReportDetailPage() {
   const [isSubmitModalOpen, setSubmitModalOpen] = useState(false);
   const showToast = useToastStore((state) => state.showToast);
 
-  const fetchReport = useCallback(async () => { /* ... (unchanged) ... */ }, [token, reportId]);
-  useEffect(() => { fetchReport(); }, [fetchReport]);
+  const fetchReport = useCallback(async () => {
+    if (!token || !reportId) {
+      setLoading(false);
+      setError("Could not load report: Missing token or Report ID.");
+      return;
+    }
 
-  const handleSubmitReport = async (managerId: string) => { /* ... (unchanged) ... */ };
-  const handleViewReceipt = async (blobId: string) => { /* ... (unchanged) ... */ };
+    const apiUrl = `/expense-report/${reportId}`;
+    try {
+      setLoading(true);
+      const response = await api.get(apiUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setReport(response.data);
+    } catch (err: any) {
+      console.error(err);
+      setError('Failed to fetch report details.');
+    } finally {
+      setLoading(false);
+    }
+  }, [token, reportId]);
+
+  useEffect(() => {
+    fetchReport();
+  }, [fetchReport]);
+
+  const handleSubmitReport = async (managerId: string) => {
+    try {
+      await api.post(`/expense-report/${reportId}/submit`, { manager_id: managerId }, { headers: { Authorization: `Bearer ${token}` } });
+      showToast('Report submitted successfully!', 'success');
+      router.push('/reports');
+    } catch (err) {
+      showToast('Failed to submit report.', 'error');
+    }
+  };
+  
+  const handleViewReceipt = async (blobId: string) => {
+    if (!token) return;
+    try {
+      const response = await api.get(`/blob/${blobId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'arraybuffer',
+      });
+      const blob = new Blob([response.data], { type: response.headers['content-type'] });
+      const url = window.URL.createObjectURL(blob);
+      window.open(url, '_blank');
+    } catch (error) {
+      console.error('Error fetching receipt:', error);
+      showToast('Could not display receipt.', 'error');
+    }
+  };
 
   if (loading) return <p>Loading report...</p>;
   if (error) return <p className="text-danger">{error}</p>;

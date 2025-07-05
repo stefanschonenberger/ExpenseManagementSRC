@@ -1,4 +1,3 @@
-// src/components/AddExpenseModal.tsx
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -25,14 +24,16 @@ interface AddExpenseModalProps {
 }
 
 export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit, expenseTypes }: AddExpenseModalProps) {
+  const getTodayString = () => new Date().toISOString().split('T')[0];
+
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
-  const [expenseDate, setExpenseDate] = useState('');
+  const [expenseDate, setExpenseDate] = useState(getTodayString());
   const [supplier, setSupplier] = useState('');
   const [vatApplied, setVatApplied] = useState(false);
   const [expenseType, setExpenseType] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-  const [book, setBook] = useState(false); // New state for the checkbox
+  const [book, setBook] = useState(false);
 
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,17 +43,18 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   const isEditMode = !!expenseToEdit;
 
   useEffect(() => {
-    if (isEditMode) {
+    if (isEditMode && expenseToEdit) {
       setTitle(expenseToEdit.title);
       setAmount((expenseToEdit.amount / 100).toFixed(2));
       setExpenseDate(new Date(expenseToEdit.expense_date).toISOString().split('T')[0]);
       setSupplier(expenseToEdit.supplier || '');
       setVatApplied(expenseToEdit.vat_applied);
       setExpenseType(expenseToEdit.expense_type || '');
-	  setBook(expenseToEdit.book || false); // Pre-fill the new checkbox
+	  setBook(expenseToEdit.book || false);
     } else if (expenseTypes.length > 0) {
       setExpenseType(expenseTypes[0]);
 	  setBook(false);
+      setExpenseDate(getTodayString());
     }
   }, [isEditMode, expenseToEdit, expenseTypes]);
 
@@ -136,7 +138,15 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
               </div>
               <div>
                   <label htmlFor="expenseDate" className="block text-sm font-medium text-gray-700">Expense Date</label>
-                  <input type="date" id="expenseDate" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                  <input
+                    type="date"
+                    id="expenseDate"
+                    value={expenseDate}
+                    onChange={(e) => setExpenseDate(e.target.value)}
+                    required
+                    max={getTodayString()}
+                    className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
+                  />
               </div>
             </div>
             <div>

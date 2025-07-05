@@ -1,5 +1,3 @@
-// backend/src/expense-report/expense-report.module.ts
-
 import { Module } from '@nestjs/common';
 import { ExpenseReportService } from './expense-report.service';
 import { ExpenseReportController } from './expense-report.controller';
@@ -9,18 +7,22 @@ import { Expense } from 'src/expense/entities/expense.entity';
 import { User } from 'src/user/entities/user.entity';
 import { ManagementRelationship } from 'src/user/entities/management-relationship.entity';
 import { EmailModule } from 'src/email/email.module';
+import { PdfModule } from 'src/pdf/pdf.module';
+import { BlobModule } from 'src/blob/blob.module';
+import { AdminModule } from 'src/admin/admin.module'; // Import AdminModule
 
 @Module({
   imports: [
-    // TypeOrm entities used within this module
     TypeOrmModule.forFeature([
       ExpenseReport,
       Expense,
       User,
       ManagementRelationship,
     ]),
-    // Import the EmailModule to make EmailService available for injection
-    EmailModule, 
+    EmailModule,
+    PdfModule,
+    BlobModule,
+    AdminModule, // Add AdminModule here to make its exported providers available
   ],
   controllers: [ExpenseReportController],
   providers: [ExpenseReportService],

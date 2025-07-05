@@ -1,13 +1,13 @@
-// src/app/reports/page.tsx
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { PlusCircle, Trash2, Eye, AlertCircle } from 'lucide-react'; // Add AlertCircle
+import { PlusCircle, Trash2, Eye, Download, AlertCircle } from 'lucide-react';
 import CreateReportModal from '@/components/CreateReportModal';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/utils';
+import { useToastStore } from '@/lib/toastStore';
 
 interface Report {
   id: string;
@@ -15,7 +15,7 @@ interface Report {
   total_amount: number;
   status: string;
   created_at: string;
-  rejection_reason: string | null; // Add rejection reason
+  rejection_reason: string | null;
 }
 
 export default function ReportsPage() {
@@ -24,17 +24,13 @@ export default function ReportsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const token = useAuthStore((state) => state.token);
+  const showToast = useToastStore((state) => state.showToast);
 
   const fetchReports = useCallback(async () => {
-    if (!token) {
-      setLoading(false);
-      return;
-    }
+    if (!token) { setLoading(false); return; }
     try {
       setLoading(true);
-      const response = await api.get('/expense-report', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await api.get('/expense-report', { headers: { Authorization: `Bearer ${token}` } });
       setReports(response.data);
     } catch (err) {
       setError('Failed to fetch reports.');
@@ -43,9 +39,7 @@ export default function ReportsPage() {
     }
   }, [token]);
 
-  useEffect(() => {
-    fetchReports();
-  }, [fetchReports]);
+  useEffect(() => { fetchReports(); }, [fetchReports]);
   
   const handleReportAdded = () => {
     fetchReports();
@@ -53,13 +47,36 @@ export default function ReportsPage() {
   };
 
   const handleDeleteReport = async (reportId: string) => {
+    if (window.confirm('Are you sure you want to delete this draft report?')) {
+        try {
+            await api.delete(`/expense-report/${reportId}`, { headers: { Authorization: `Bearer ${token}` } });
+            showToast('Report deleted.', 'success');
+            fetchReports();
+        } catch (err: any) {
+            showToast(err.response?.data?.message || "Failed to delete the report.", 'error');
+        }
+    }
+  };
+
+  const handleDownloadReport = async (reportId: string) => {
     try {
-      await api.delete(`/expense-report/${reportId}`, {
+      showToast('Generating your PDF... please wait.', 'info');
+      const response = await api.get(`/expense-report/${reportId}/pdf`, {
         headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
       });
-      fetchReports();
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to delete the report.");
+
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Opiatech-Report-${reportId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast("Failed to download the report PDF.", "error");
+      console.error(err);
     }
   };
 
@@ -92,18 +109,18 @@ export default function ReportsPage() {
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
             {reports.map((report) => (
-              <tr key={report.id} className={report.rejection_reason ? 'bg-red-50' : ''}>
+              <tr key={report.id} className={report.status === 'REJECTED' ? 'bg-red-50' : ''}>
                 <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">{report.title}</td>
                 <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{new Date(report.created_at).toLocaleDateString()}</td>
                 <td className="px-6 py-4 text-sm text-right text-gray-500 whitespace-nowrap">{formatCurrency(report.total_amount)}</td>
                 <td className="px-6 py-4 text-sm text-center text-gray-500 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      report.rejection_reason ? 'bg-red-100 text-red-800' :
+                      report.status === 'REJECTED' ? 'bg-red-100 text-red-800' :
                       report.status === 'DRAFT' ? 'bg-yellow-100 text-yellow-800' :
                       report.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-800' :
                       'bg-green-100 text-green-800'
                   }`}>
-                    {report.rejection_reason ? 'REJECTED' : report.status}
+                    {report.status}
                   </span>
                 </td>
                 <td className="flex items-center justify-end px-6 py-4 space-x-4 text-sm text-right whitespace-nowrap">
@@ -113,6 +130,11 @@ export default function ReportsPage() {
                   {report.status === 'DRAFT' && (
                     <button onClick={() => handleDeleteReport(report.id)} className="text-danger hover:text-red-700" title="Delete Report">
                       <Trash2 className="w-5 h-5" />
+                    </button>
+                  )}
+                  {report.status === 'APPROVED' && (
+                    <button onClick={() => handleDownloadReport(report.id)} className="text-success hover:text-green-700" title="Download PDF">
+                      <Download className="w-5 h-5" />
                     </button>
                   )}
                 </td>
