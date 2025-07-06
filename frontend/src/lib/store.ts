@@ -1,4 +1,3 @@
-// src/lib/store.ts
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { jwtDecode } from 'jwt-decode';
@@ -6,7 +5,8 @@ import { jwtDecode } from 'jwt-decode';
 interface User {
   id: string;
   email: string;
-  roles: string[]; // Must be an array
+  roles: string[];
+  full_name: string; // Add the missing property here
 }
 
 interface AuthState {

@@ -1,7 +1,3 @@
-// ==========================================================
-// File: src/auth/auth.service.ts
-// This version is now consistent with the updated User entity.
-// ==========================================================
 import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { CreateUserDto } from 'src/user/dto/create-user.dto';
@@ -33,8 +29,12 @@ export class AuthService {
   }
 
   async login(user: User) {
-    // This now correctly accesses user.roles.
-    const payload = { email: user.email, sub: user.id, roles: user.roles };
+    const payload = { 
+      email: user.email, 
+      sub: user.id, 
+      roles: user.roles,
+      full_name: user.full_name,
+    };
     return {
       access_token: this.jwtService.sign(payload),
     };

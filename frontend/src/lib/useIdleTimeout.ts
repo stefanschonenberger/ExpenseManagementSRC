@@ -1,4 +1,3 @@
-// src/lib/useIdleTimeout.ts
 'use client';
 
 import { useEffect, useRef, useCallback } from 'react';
@@ -6,7 +5,8 @@ import { useAuthStore } from './store';
 
 export function useIdleTimeout(timeoutInMs: number | null) {
   const logout = useAuthStore((state) => state.logout);
-  const timer = useRef<NodeJS.Timeout>();
+  // ** FIX: Initialize useRef with a default value of null **
+  const timer = useRef<NodeJS.Timeout | null>(null);
 
   const resetTimer = useCallback(() => {
     if (timer.current) {
