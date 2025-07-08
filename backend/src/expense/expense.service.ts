@@ -1,7 +1,3 @@
-// ==========================================================
-// File: src/expense/expense.service.ts
-// The constructor needs to be updated to inject AdminService and remove ConfigService.
-// ==========================================================
 import {
   Injectable,
   NotFoundException,
@@ -22,9 +18,9 @@ export class ExpenseService {
     @InjectRepository(Expense)
     private readonly expenseRepository: Repository<Expense>,
     private readonly blobService: BlobService,
-    private readonly adminService: AdminService, // Correctly inject AdminService
+    private readonly adminService: AdminService,
   ) {}
-  
+
   async create(
     createExpenseDto: CreateExpenseDto,
     user: User,
@@ -35,9 +31,13 @@ export class ExpenseService {
     });
 
     if (newExpense.vat_applied) {
-      // Get the live VAT rate from the database via the AdminService
-      const settings = await this.adminService.getSettings();
-      newExpense.vat_amount = Math.round(newExpense.amount * Number(settings.vat_rate));
+      // If vat_amount is provided in the DTO, use it. Otherwise, calculate it.
+      if (createExpenseDto.vat_amount !== undefined) {
+        newExpense.vat_amount = createExpenseDto.vat_amount;
+      } else {
+        const settings = await this.adminService.getSettings();
+        newExpense.vat_amount = Math.round(newExpense.amount * Number(settings.vat_rate));
+      }
     } else {
       newExpense.vat_amount = 0;
     }
@@ -50,7 +50,7 @@ export class ExpenseService {
     updateExpenseDto: UpdateExpenseDto,
     user: User,
   ): Promise<Expense> {
-    const expense = await this.findOne(id, user); 
+    const expense = await this.findOne(id, user);
 
     if (expense.status !== ExpenseStatus.DRAFT) {
       throw new ForbiddenException(
@@ -62,14 +62,18 @@ export class ExpenseService {
 
     if (updateExpenseDto.amount !== undefined || updateExpenseDto.vat_applied !== undefined) {
       if (expense.vat_applied) {
-        // Also use the live VAT rate when updating an expense
-        const settings = await this.adminService.getSettings();
-        expense.vat_amount = Math.round(expense.amount * Number(settings.vat_rate));
+        // If vat_amount is provided in the DTO, use it. Otherwise, calculate it.
+        if (updateExpenseDto.vat_amount !== undefined) {
+            expense.vat_amount = updateExpenseDto.vat_amount;
+        } else {
+            const settings = await this.adminService.getSettings();
+            expense.vat_amount = Math.round(expense.amount * Number(settings.vat_rate));
+        }
       } else {
         expense.vat_amount = 0;
       }
     }
-    
+
     return this.expenseRepository.save(expense);
   }
 

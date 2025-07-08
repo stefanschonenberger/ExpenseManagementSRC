@@ -1,7 +1,3 @@
-// ==========================================================
-// File: src/expense/dto/create-expense.dto.ts
-// This is the base DTO that defines all fields for a new expense.
-// ==========================================================
 import { IsString, IsNotEmpty, IsOptional, IsDateString, IsInt, Min, IsBoolean, IsUUID } from 'class-validator';
 
 export class CreateExpenseDto {
@@ -12,15 +8,15 @@ export class CreateExpenseDto {
   @IsString()
   @IsOptional()
   description?: string;
-  
+
   @IsString()
   @IsOptional()
-  supplier?: string; 
-  
+  supplier?: string;
+
   @IsDateString()
   @IsNotEmpty()
   expense_date: Date;
-  
+
   @IsInt()
   @Min(1)
   @IsNotEmpty()
@@ -29,7 +25,7 @@ export class CreateExpenseDto {
   @IsString()
   @IsNotEmpty()
   currency_code: string;
-  
+
   @IsString()
   @IsNotEmpty()
   expense_type: string;
@@ -37,11 +33,15 @@ export class CreateExpenseDto {
   @IsBoolean()
   @IsNotEmpty()
   vat_applied: boolean;
-  
+
+  @IsInt()
+  @IsOptional() // Make it optional
+  vat_amount?: number; // Add this field
+
   @IsBoolean()
   @IsOptional()
   book?: boolean;
-  
+
   @IsUUID()
   @IsOptional()
   receipt_blob_id?: string;

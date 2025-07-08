@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
-import { X, Paperclip, UploadCloud } from 'lucide-react';
+import { X, Paperclip, UploadCloud, RefreshCw } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 
 interface Expense {
@@ -14,6 +14,7 @@ interface Expense {
   vat_applied: boolean;
   expense_type: string;
   book: boolean;
+  vat_amount: number;
 }
 
 interface AddExpenseModalProps {
@@ -31,6 +32,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   const [expenseDate, setExpenseDate] = useState(getTodayString());
   const [supplier, setSupplier] = useState('');
   const [vatApplied, setVatApplied] = useState(false);
+  const [vatAmount, setVatAmount] = useState('');
   const [expenseType, setExpenseType] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [book, setBook] = useState(false);
@@ -42,6 +44,19 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   const token = useAuthStore((state) => state.token);
   const isEditMode = !!expenseToEdit;
 
+  const handleRecalculateVat = () => {
+    if (amount) {
+        const calculatedVat = (parseFloat(amount) * 0.15).toFixed(2);
+        setVatAmount(calculatedVat);
+    }
+  };
+
+  const handleNumericInputChange = (value: string, setter: (value: string) => void) => {
+    const sanitizedValue = value.replace(/[^0-9.]/g, '');
+    setter(sanitizedValue);
+  };
+
+  // This effect populates the form initially.
   useEffect(() => {
     if (isEditMode && expenseToEdit) {
       setTitle(expenseToEdit.title);
@@ -49,6 +64,8 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
       setExpenseDate(new Date(expenseToEdit.expense_date).toISOString().split('T')[0]);
       setSupplier(expenseToEdit.supplier || '');
       setVatApplied(expenseToEdit.vat_applied);
+      // Directly set the VAT amount from the expense being edited.
+      setVatAmount(expenseToEdit.vat_applied ? (expenseToEdit.vat_amount / 100).toFixed(2) : '');
       setExpenseType(expenseToEdit.expense_type || '');
 	  setBook(expenseToEdit.book || false);
     } else if (expenseTypes.length > 0) {
@@ -57,6 +74,20 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
       setExpenseDate(getTodayString());
     }
   }, [isEditMode, expenseToEdit, expenseTypes]);
+
+  // This simplified effect handles toggling the VAT checkbox for NEW expenses.
+  useEffect(() => {
+    // We only want to auto-calculate for new expenses.
+    // In edit mode, the value is set above and preserved.
+    if (!isEditMode) {
+        if (vatApplied) {
+            handleRecalculateVat();
+        } else {
+            setVatAmount('');
+        }
+    }
+  }, [vatApplied, isEditMode, amount]);
+
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) { setReceiptFile(e.target.files[0]); }
@@ -74,7 +105,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
     setIsUploading(true);
 
     try {
-      const payload = {
+      const payload: any = {
         title,
         supplier,
         amount: Math.round(parseFloat(amount) * 100),
@@ -84,6 +115,10 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
         expense_type: expenseType,
         currency_code: 'ZAR',
       };
+
+      if (vatApplied) {
+        payload.vat_amount = Math.round(parseFloat(vatAmount) * 100);
+      }
 
       if (isEditMode) {
         await api.patch(`/expense/${expenseToEdit.id}`, payload, {
@@ -103,7 +138,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
           headers: { Authorization: `Bearer ${token}` }
         });
       }
-      
+
       onExpenseAdded();
     } catch (err: any) {
       setError(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'add'} expense.`);
@@ -134,7 +169,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                   <label htmlFor="amount" className="block text-sm font-medium text-gray-700">Amount</label>
-                  <input type="number" step="0.01" id="amount" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                  <input type="text" id="amount" value={amount} onChange={(e) => handleNumericInputChange(e.target.value, setAmount)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
               </div>
               <div>
                   <label htmlFor="expenseDate" className="block text-sm font-medium text-gray-700">Expense Date</label>
@@ -167,6 +202,17 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
                 <input id="vat_applied" name="vat_applied" type="checkbox" checked={vatApplied} onChange={(e) => setVatApplied(e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
                 <label htmlFor="vat_applied" className="block ml-2 text-sm text-gray-900">VAT Applied</label>
             </div>
+            {vatApplied && (
+                <div>
+                    <label htmlFor="vatAmount" className="block text-sm font-medium text-gray-700">VAT Amount</label>
+                    <div className="flex items-center mt-1">
+                        <input type="text" id="vatAmount" value={vatAmount} onChange={(e) => handleNumericInputChange(e.target.value, setVatAmount)} required className="flex-1 w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:ring-primary focus:border-primary" />
+                        <button type="button" onClick={handleRecalculateVat} title="Recalculate VAT" className="px-3 py-2 text-gray-600 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-200">
+                            <RefreshCw className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+            )}
 			<div className="flex items-center">
                 <input id="book_expense" name="book_expense" type="checkbox" checked={book} onChange={(e) => setBook(e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
                 <label htmlFor="book_expense" className="block ml-2 text-sm text-gray-900">Book</label>
