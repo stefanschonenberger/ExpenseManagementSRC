@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
-import { X, Paperclip, UploadCloud, RefreshCw, ScanLine, Image as ImageIcon } from 'lucide-react';
+import { X, Paperclip, UploadCloud, RefreshCw, ScanLine, Image as ImageIcon, FileText } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useToastStore } from '@/lib/toastStore';
 import OcrOverlayModal from './OcrOverlayModal';
@@ -233,8 +233,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
     <>
       {/* Modal container */}
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50">
-        {/* FIX: Changed max-w-2xl to max-w-5xl and added flex for two-column layout */}
-        <div className="flex w-full max-w-5xl p-6 space-x-6 bg-white rounded-lg shadow-xl" style={{height: '90vh'}}>
+        <div className="flex w-full max-w-7xl p-6 space-x-6 bg-white rounded-lg shadow-xl" style={{height: '90vh'}}>
           
           {/* Left Column: Form */}
           <div className="flex flex-col w-1/2">
@@ -324,11 +323,16 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
           <div className="flex flex-col w-1/2 pl-6 border-l">
             <h3 className="text-lg font-semibold text-gray-800">Receipt Preview</h3>
             <div className="flex-grow mt-2 bg-gray-100 rounded-lg">
-              {receiptImageSrc ? (
-                <img src={receiptImageSrc} alt="Receipt Preview" className="object-contain w-full h-full rounded-md"/>
+              {/* FIX: Conditional rendering for PDF vs Image */}
+              {receiptFile ? (
+                receiptFile.type === 'application/pdf' ? (
+                  <embed src={receiptImageSrc} type="application/pdf" className="w-full h-full" />
+                ) : (
+                  <img src={receiptImageSrc} alt="Receipt Preview" className="object-contain w-full h-full rounded-md"/>
+                )
               ) : (
                 <div className="flex items-center justify-center w-full h-full text-gray-500">
-                  <ImageIcon className="w-16 h-16"/>
+                  <FileText className="w-16 h-16"/>
                 </div>
               )}
             </div>

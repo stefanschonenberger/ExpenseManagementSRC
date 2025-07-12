@@ -146,15 +146,16 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
-      <div className="flex flex-col w-full h-full max-w-6xl max-h-[90vh] p-4 bg-white rounded-lg shadow-xl">
+      {/* FIX: Increased max-width to 7xl for a wider overall modal */}
+      <div className="flex flex-col w-full h-full max-w-7xl max-h-[90vh] p-4 bg-white rounded-lg shadow-xl">
         <div className="flex items-center justify-between flex-shrink-0 pb-4 border-b">
           <h2 className="text-xl font-semibold text-gray-900">Select Fields from Receipt</h2>
           <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100"><X /></button>
         </div>
 
         <div className="flex flex-grow mt-4 overflow-hidden">
-          {/* Control Panel */}
-          <div className="flex flex-col w-1/3 pr-4 space-y-4 border-r">
+          {/* Control Panel - FIX: Changed width to w-1/4 */}
+          <div className="flex flex-col w-1/4 pr-4 space-y-4 border-r">
             <p className="text-sm text-gray-600">Select a field to populate, then click the corresponding text on the receipt image.</p>
             
             <div className="space-y-2">
@@ -186,8 +187,8 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
             </div>
           </div>
 
-          {/* Image and Overlay */}
-          <div ref={containerRef} className="relative flex-grow w-2/3 h-full overflow-hidden bg-gray-100">
+          {/* Image and Overlay - FIX: Changed width to w-3/4 */}
+          <div ref={containerRef} className="relative flex-grow w-3/4 h-full overflow-hidden bg-gray-100">
               <img 
                 ref={imageRef} 
                 src={imageSrc} 
