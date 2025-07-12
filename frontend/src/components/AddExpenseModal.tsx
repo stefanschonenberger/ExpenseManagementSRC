@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
-import { X, Paperclip, UploadCloud, RefreshCw, ScanLine, Image as ImageIcon, FileText } from 'lucide-react';
+import { X, Paperclip, UploadCloud, RefreshCw, ScanLine, FileText } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useToastStore } from '@/lib/toastStore';
 import OcrOverlayModal from './OcrOverlayModal';
@@ -117,16 +117,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
       });
       
       const { parsedData, overlay } = response.data;
-      setScanResult({ overlay });
-
-      setTitle(parsedData.title || '');
-      setAmount(parsedData.amount ? (parsedData.amount / 100).toFixed(2) : '');
-      setExpenseDate(parsedData.expense_date || getTodayString());
-      setSupplier(parsedData.supplier || '');
-      if (parsedData.vat_amount > 0) {
-        setVatApplied(true);
-        setVatAmount((parsedData.vat_amount / 100).toFixed(2));
-      }
+      setScanResult({ parsedData, overlay }); // Pass parsedData to the overlay
 
       showToast('Scan complete. Please verify the details.', 'success');
       setOverlayOpen(true);
@@ -231,18 +222,15 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
 
   return (
     <>
-      {/* Modal container */}
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50">
         <div className="flex w-full max-w-7xl p-6 space-x-6 bg-white rounded-lg shadow-xl" style={{height: '90vh'}}>
           
-          {/* Left Column: Form */}
-          <div className="flex flex-col w-1/2">
+          <div className="flex flex-col w-1/3">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">{isEditMode ? 'Edit Expense' : 'Add New Expense'}</h2>
               <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100"><X /></button>
             </div>
-            <form onSubmit={handleSubmit} className="flex flex-col flex-grow mt-4 space-y-4 overflow-y-auto">
-              {/* Form fields */}
+            <form onSubmit={handleSubmit} className="flex flex-col flex-grow mt-4 space-y-4 overflow-y-auto pr-2">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <label htmlFor="title" className="block text-sm font-medium text-gray-700">Title</label>
@@ -319,16 +307,14 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
             </form>
           </div>
 
-          {/* Right Column: Receipt Preview */}
-          <div className="flex flex-col w-1/2 pl-6 border-l">
+          <div className="flex flex-col w-2/3 pl-6 border-l">
             <h3 className="text-lg font-semibold text-gray-800">Receipt Preview</h3>
-            <div className="flex-grow mt-2 bg-gray-100 rounded-lg">
-              {/* FIX: Conditional rendering for PDF vs Image */}
+            <div className="relative flex-grow mt-2 bg-gray-100 rounded-lg">
               {receiptFile ? (
                 receiptFile.type === 'application/pdf' ? (
                   <embed src={receiptImageSrc} type="application/pdf" className="w-full h-full" />
                 ) : (
-                  <img src={receiptImageSrc} alt="Receipt Preview" className="object-contain w-full h-full rounded-md"/>
+                  <img src={receiptImageSrc} alt="Receipt Preview" className="absolute top-0 left-0 object-contain w-full h-full rounded-md"/>
                 )
               ) : (
                 <div className="flex items-center justify-center w-full h-full text-gray-500">

@@ -3,9 +3,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { X, Check, DollarSign, Calendar, Building, Percent } from 'lucide-react';
+import { X, Check, DollarSign, Calendar, Building } from 'lucide-react';
 
-// Define the structure of the OCR overlay data
 interface OcrWord {
   WordText: string;
   Left: number;
@@ -29,18 +28,17 @@ interface OcrOverlay {
 interface OcrOverlayModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (data: { total: string; date: string; supplier: string; vat: string }) => void;
-  scanResult: { overlay: OcrOverlay };
+  onConfirm: (data: { total: string; date: string; supplier: string; }) => void;
+  scanResult: { overlay: OcrOverlay; parsedData: any };
   imageSrc: string;
 }
 
-type SelectionMode = 'supplier' | 'date' | 'total' | 'vat';
+type SelectionMode = 'supplier' | 'date' | 'total';
 
 export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult, imageSrc }: OcrOverlayModalProps) {
   const [selectedSupplier, setSelectedSupplier] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTotal, setSelectedTotal] = useState('');
-  const [selectedVat, setSelectedVat] = useState('');
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('supplier');
   
   const [imageDimensions, setImageDimensions] = useState({
@@ -54,16 +52,22 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Pre-populate fields when the modal opens with the OCR's best guess
+  useEffect(() => {
+    if (isOpen && scanResult.parsedData) {
+      setSelectedSupplier(scanResult.parsedData.supplier || '');
+      setSelectedDate(scanResult.parsedData.expense_date || '');
+      setSelectedTotal(scanResult.parsedData.amount ? (scanResult.parsedData.amount / 100).toFixed(2) : '');
+    }
+  }, [isOpen, scanResult.parsedData]);
+
   const handleImageLoad = () => {
     if (imageRef.current && containerRef.current) {
         const { clientWidth: containerWidth, clientHeight: containerHeight } = containerRef.current;
         const { naturalWidth, naturalHeight } = imageRef.current;
-
         const containerAspectRatio = containerWidth / containerHeight;
         const imageAspectRatio = naturalWidth / naturalHeight;
-
         let displayedWidth, displayedHeight;
-
         if (imageAspectRatio > containerAspectRatio) {
             displayedWidth = containerWidth;
             displayedHeight = containerWidth / imageAspectRatio;
@@ -71,26 +75,15 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
             displayedHeight = containerHeight;
             displayedWidth = containerHeight * imageAspectRatio;
         }
-
         const offsetX = (containerWidth - displayedWidth) / 2;
         const offsetY = (containerHeight - displayedHeight) / 2;
-
-        setImageDimensions({
-            displayedWidth,
-            displayedHeight,
-            naturalWidth,
-            naturalHeight,
-            offsetX,
-            offsetY,
-        });
+        setImageDimensions({ displayedWidth, displayedHeight, naturalWidth, naturalHeight, offsetX, offsetY });
     }
   };
   
   useEffect(() => {
     window.addEventListener('resize', handleImageLoad);
-    return () => {
-      window.removeEventListener('resize', handleImageLoad);
-    };
+    return () => window.removeEventListener('resize', handleImageLoad);
   }, []);
 
   useEffect(() => {
@@ -103,10 +96,7 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
   if (!isOpen) return null;
 
   const handleLineClick = (line: OcrLine) => {
-    // FIX: Always populate the field with the raw text from the clicked line.
-    // This provides immediate feedback and ensures the selection is never lost.
-    const lineText = line.Words.map(w => w.WordText).join(' ');
-    
+    const lineText = line.Words.map(w => w.WordText).join(' ').trim();
     switch (selectionMode) {
       case 'supplier':
         setSelectedSupplier(lineText);
@@ -117,9 +107,6 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
       case 'total':
         setSelectedTotal(lineText);
         break;
-      case 'vat':
-        setSelectedVat(lineText);
-        break;
     }
   };
 
@@ -128,7 +115,6 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
       supplier: selectedSupplier,
       date: selectedDate,
       total: selectedTotal,
-      vat: selectedVat,
     });
     onClose();
   };
@@ -137,7 +123,6 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
     { mode: 'supplier', icon: Building, label: 'Supplier' },
     { mode: 'date', icon: Calendar, label: 'Date' },
     { mode: 'total', icon: DollarSign, label: 'Total' },
-    { mode: 'vat', icon: Percent, label: 'VAT' },
   ];
 
   const scaleFactor = imageDimensions.naturalWidth > 0 
@@ -146,18 +131,14 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75">
-      {/* FIX: Increased max-width to 7xl for a wider overall modal */}
       <div className="flex flex-col w-full h-full max-w-7xl max-h-[90vh] p-4 bg-white rounded-lg shadow-xl">
         <div className="flex items-center justify-between flex-shrink-0 pb-4 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">Select Fields from Receipt</h2>
+          <h2 className="text-xl font-semibold text-gray-900">Verify Scanned Data</h2>
           <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100"><X /></button>
         </div>
-
         <div className="flex flex-grow mt-4 overflow-hidden">
-          {/* Control Panel - FIX: Changed width to w-1/4 */}
-          <div className="flex flex-col w-1/4 pr-4 space-y-4 border-r">
-            <p className="text-sm text-gray-600">Select a field to populate, then click the corresponding text on the receipt image.</p>
-            
+          <div className="flex flex-col w-1/3 pr-4 space-y-4 border-r">
+            <p className="text-sm text-gray-600">Auto-populated data is shown below. Click a field, then click the receipt text to correct it.</p>
             <div className="space-y-2">
                 {selectionButtons.map(({mode, icon: Icon, label}) => (
                     <button key={mode} onClick={() => setSelectionMode(mode)} className={`w-full flex items-center p-3 text-left rounded-md border-2 transition-colors ${selectionMode === mode ? 'bg-blue-100 border-primary text-primary' : 'bg-gray-50 border-gray-200 hover:bg-gray-100'}`}>
@@ -166,7 +147,6 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
                     </button>
                 ))}
             </div>
-
             <div className="p-4 mt-4 space-y-3 border rounded-md bg-gray-50">
                 <div>
                     <label className="text-xs font-semibold text-gray-500">SUPPLIER</label>
@@ -180,52 +160,21 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
                     <label className="text-xs font-semibold text-gray-500">TOTAL</label>
                     <input type="text" value={selectedTotal} onChange={e => setSelectedTotal(e.target.value)} className="w-full p-2 mt-1 text-sm border rounded-md"/>
                 </div>
-                <div>
-                    <label className="text-xs font-semibold text-gray-500">VAT</label>
-                    <input type="text" value={selectedVat} onChange={e => setSelectedVat(e.target.value)} className="w-full p-2 mt-1 text-sm border rounded-md"/>
-                </div>
             </div>
           </div>
-
-          {/* Image and Overlay - FIX: Changed width to w-3/4 */}
-          <div ref={containerRef} className="relative flex-grow w-3/4 h-full overflow-hidden bg-gray-100">
-              <img 
-                ref={imageRef} 
-                src={imageSrc} 
-                alt="Scanned Receipt" 
-                onLoad={handleImageLoad}
-                className="absolute object-contain"
-                style={{
-                    width: `${imageDimensions.displayedWidth}px`,
-                    height: `${imageDimensions.displayedHeight}px`,
-                    top: `${imageDimensions.offsetY}px`,
-                    left: `${imageDimensions.offsetX}px`,
-                }}
-              />
+          <div ref={containerRef} className="relative flex-grow w-2/3 h-full overflow-hidden bg-gray-100">
+              <img ref={imageRef} src={imageSrc} alt="Scanned Receipt" onLoad={handleImageLoad} className="absolute object-contain" style={{ width: `${imageDimensions.displayedWidth}px`, height: `${imageDimensions.displayedHeight}px`, top: `${imageDimensions.offsetY}px`, left: `${imageDimensions.offsetX}px` }} />
               {scaleFactor > 0 && scanResult.overlay.Lines.map((line, lineIndex) => {
                 if (!line.Words || line.Words.length === 0) return null;
                 const firstWord = line.Words[0];
                 const lastWord = line.Words[line.Words.length - 1];
                 const lineWidth = lastWord.Left + lastWord.Width - firstWord.Left;
-
                 return (
-                  <div
-                    key={lineIndex}
-                    className="absolute border border-dashed border-blue-500 cursor-pointer hover:bg-blue-500 hover:bg-opacity-30 z-10"
-                    style={{
-                      left: `${(firstWord.Left * scaleFactor) + imageDimensions.offsetX}px`,
-                      top: `${(line.MinTop * scaleFactor) + imageDimensions.offsetY}px`,
-                      width: `${lineWidth * scaleFactor}px`,
-                      height: `${line.MaxHeight * scaleFactor}px`,
-                    }}
-                    onClick={() => handleLineClick(line)}
-                    title={line.Words.map(w => w.WordText).join(' ')}
-                  />
+                  <div key={lineIndex} className="absolute border border-dashed border-blue-500 cursor-pointer hover:bg-blue-500 hover:bg-opacity-30 z-10" style={{ left: `${(firstWord.Left * scaleFactor) + imageDimensions.offsetX}px`, top: `${(line.MinTop * scaleFactor) + imageDimensions.offsetY}px`, width: `${lineWidth * scaleFactor}px`, height: `${line.MaxHeight * scaleFactor}px` }} onClick={() => handleLineClick(line)} title={line.Words.map(w => w.WordText).join(' ')} />
                 )
               })}
           </div>
         </div>
-
         <div className="flex justify-end flex-shrink-0 pt-4 mt-4 border-t">
           <button onClick={onClose} type="button" className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
           <button onClick={handleConfirm} type="button" className="inline-flex items-center justify-center px-4 py-2 ml-3 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-primary hover:bg-primary-hover">
