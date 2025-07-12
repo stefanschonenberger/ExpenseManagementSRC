@@ -184,29 +184,41 @@ export class PdfService {
           const { width: pageWidth, height: pageHeight } = page.getSize();
           const margin = 50;
           
+          const titleY = pageHeight - margin;
           page.drawText(`Receipt for: ${expense.title}`, {
             x: margin,
-            y: pageHeight - margin + 10,
+            y: titleY,
             font: helveticaBoldFont,
             size: 14,
           });
 
           // FIX: Robustly scale the image to fit within the page margins.
+          const titleHeight = 30; // Estimated height for title and padding
           const usableWidth = pageWidth - margin * 2;
-          const usableHeight = pageHeight - margin * 2 - 40; // leave space for title
+          const usableHeight = pageHeight - margin * 2 - titleHeight;
 
-          // Use the scaleToFit method to get the correct dimensions
-          const scaled = image.scaleToFit(usableWidth, usableHeight);
+          // Calculate dimensions if scaled to fit the page
+          const fitScale = Math.min(usableWidth / image.width, usableHeight / image.height);
+          const fitWidth = image.width * fitScale;
+          const fitHeight = image.height * fitScale;
+
+          // Calculate dimensions for 50% scaling
+          const halfWidth = image.width * 0.5;
+          const halfHeight = image.height * 0.5;
+
+          // Use the smaller of the two calculated sizes to ensure it's never too big
+          const finalWidth = Math.min(fitWidth, halfWidth);
+          const finalHeight = Math.min(fitHeight, halfHeight);
 
           // Center the image horizontally and place it below the title
-          const xPosition = (pageWidth - scaled.width) / 2;
-          const yPosition = pageHeight - margin - 40 - scaled.height;
+          const imageX = (pageWidth - finalWidth) / 2;
+          const imageY = titleY - titleHeight - finalHeight;
 
           page.drawImage(image, {
-            x: xPosition,
-            y: yPosition,
-            width: scaled.width,
-            height: scaled.height,
+            x: imageX,
+            y: imageY,
+            width: finalWidth,
+            height: finalHeight,
           });
         }
       }

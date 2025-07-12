@@ -1,66 +1,110 @@
-// src/components/ExpenseTable.tsx
-import { Eye, Pencil, Trash2, Check } from 'lucide-react'; // Import Check icon
-import { formatCurrency } from '@/lib/utils';
+// frontend/src/components/ExpenseTable.tsx
 
-export default function ExpenseTable({ expenses, onEdit, onDelete, onViewReceipt }: any) {
+'use client';
+
+import { useState } from 'react';
+import { Trash2, Edit, Paperclip } from 'lucide-react';
+import { useAuthStore } from '@/lib/store';
+import api from '@/lib/api';
+import ReceiptPreviewModal from './ReceiptPreviewModal'; // Import the new modal
+
+interface Expense {
+  id: string;
+  title: string;
+  amount: number;
+  expense_date: string;
+  supplier: string | null;
+  vat_applied: boolean;
+  vat_amount: number;
+  receipt_blob_id: string | null;
+}
+
+interface ExpenseTableProps {
+  expenses: Expense[];
+  onEdit: (expense: Expense) => void;
+  onDelete: (expenseId: string) => void;
+  reportId?: string;
+}
+
+export default function ExpenseTable({ expenses, onEdit, onDelete }: ExpenseTableProps) {
+  const token = useAuthStore((state) => state.token);
+  const [isPreviewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewMimeType, setPreviewMimeType] = useState('');
+
+  const handlePreview = async (expense: Expense) => {
+    if (!expense.receipt_blob_id) return;
+    try {
+        const response = await api.get(`/blob/${expense.receipt_blob_id}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            responseType: 'blob',
+        });
+        const blob = response.data;
+        const url = URL.createObjectURL(blob);
+        setPreviewUrl(url);
+        setPreviewMimeType(blob.type);
+        setPreviewOpen(true);
+    } catch (error) {
+        console.error("Failed to fetch receipt for preview", error);
+    }
+  };
+
+  const handleClosePreview = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewOpen(false);
+    setPreviewUrl('');
+    setPreviewMimeType('');
+  };
+
   return (
-    <div className="overflow-hidden bg-white rounded-lg shadow">
-      <table className="min-w-full divide-y divide-gray-200">
+    <div className="overflow-x-auto">
+      <table className="min-w-full bg-white">
         <thead className="bg-gray-50">
           <tr>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Date</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Title</th>
-            <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Type</th>
-            <th className="w-12 px-6 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Book</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Supplier</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">Amount</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">VAT</th>
-            <th className="px-6 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Status</th>
-            <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">Actions</th>
+            <th className="px-6 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Receipt</th>
+            <th className="px-6 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Actions</th>
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {expenses.length === 0 ? (
-            <tr>
-              <td colSpan={9} className="px-6 py-4 text-sm text-center text-gray-500">No expenses in this category.</td>
+          {expenses.map((expense) => (
+            <tr key={expense.id}>
+              <td className="px-6 py-4 whitespace-nowrap">{new Date(expense.expense_date).toLocaleDateString()}</td>
+              <td className="px-6 py-4 whitespace-nowrap">{expense.title}</td>
+              <td className="px-6 py-4 whitespace-nowrap">{expense.supplier || 'N/A'}</td>
+              <td className="px-6 py-4 text-right whitespace-nowrap">R {(expense.amount / 100).toFixed(2)}</td>
+              <td className="px-6 py-4 text-right whitespace-nowrap">R {(expense.vat_amount / 100).toFixed(2)}</td>
+              <td className="px-6 py-4 text-center whitespace-nowrap">
+                {expense.receipt_blob_id && (
+                  <button onClick={() => handlePreview(expense)} title="Preview Receipt">
+                    <Paperclip className="w-5 h-5 text-blue-500 hover:text-blue-700" />
+                  </button>
+                )}
+              </td>
+              <td className="px-6 py-4 text-center whitespace-nowrap">
+                <button onClick={() => onEdit(expense)} className="text-blue-600 hover:text-blue-900">
+                  <Edit className="w-5 h-5" />
+                </button>
+                <button onClick={() => onDelete(expense.id)} className="ml-4 text-red-600 hover:text-red-900">
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </td>
             </tr>
-          ) : (
-            expenses.map((expense: any) => (
-              <tr key={expense.id}>
-                <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{new Date(expense.expense_date).toLocaleDateString()}</td>
-                <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">{expense.title}</td>
-                <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{expense.expense_type}</td>
-                <td className="px-6 py-4 text-center">
-                  {expense.book && <Check className="w-5 h-5 mx-auto text-success" />}
-                </td>
-                <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{expense.supplier}</td>
-                <td className="px-6 py-4 text-sm text-right text-gray-500 whitespace-nowrap">{formatCurrency(expense.amount)}</td>
-                <td className="px-6 py-4 text-sm text-right text-gray-500 whitespace-nowrap">{expense.vat_amount > 0 ? formatCurrency(expense.vat_amount) : '-'}</td>
-                <td className="px-6 py-4 text-sm text-center text-gray-500 whitespace-nowrap">
-                  <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                      expense.status === 'DRAFT' ? 'bg-yellow-100 text-yellow-800' :
-                      expense.status === 'SUBMITTED' ? 'bg-blue-100 text-blue-800' :
-                      'bg-green-100 text-green-800'
-                  }`}>
-                    {expense.status}
-                  </span>
-                </td>
-                <td className="flex items-center justify-end px-6 py-4 space-x-4 text-sm text-right whitespace-nowrap">
-                  {expense.receipt_blob_id && (
-                    <button onClick={() => onViewReceipt(expense.receipt_blob_id)} className="text-primary hover:text-primary-hover"><Eye className="w-5 h-5" /></button>
-                  )}
-                  {expense.status === 'DRAFT' && (
-                    <>
-                      <button onClick={() => onEdit(expense)} className="text-gray-500 hover:text-gray-700"><Pencil className="w-5 h-5" /></button>
-                      <button onClick={() => onDelete(expense.id)} className="text-danger hover:text-red-700"><Trash2 className="w-5 h-5" /></button>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))
-          )}
+          ))}
         </tbody>
       </table>
+      <ReceiptPreviewModal
+        isOpen={isPreviewOpen}
+        onClose={handleClosePreview}
+        previewUrl={previewUrl}
+        mimeType={previewMimeType}
+      />
     </div>
   );
 }
