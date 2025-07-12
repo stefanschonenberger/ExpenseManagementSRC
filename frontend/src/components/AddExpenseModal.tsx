@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
-import { X, Paperclip, UploadCloud, RefreshCw, ScanLine } from 'lucide-react';
+import { X, Paperclip, UploadCloud, RefreshCw, ScanLine, Image as ImageIcon } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
 import { useToastStore } from '@/lib/toastStore';
 import OcrOverlayModal from './OcrOverlayModal';
@@ -231,93 +231,114 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
 
   return (
     <>
+      {/* Modal container */}
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="w-full max-w-2xl p-6 bg-white rounded-lg shadow-xl">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-semibold text-gray-900">{isEditMode ? 'Edit Expense' : 'Add New Expense'}</h2>
-            <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100"><X /></button>
-          </div>
-          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <label htmlFor="title" className="block text-sm font-medium text-gray-700">Title</label>
-                <input type="text" id="title" value={title} onChange={(e) => setTitle(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
-              </div>
-              <div>
-                <label htmlFor="supplier" className="block text-sm font-medium text-gray-700">Supplier / Vendor</label>
-                <input type="text" id="supplier" value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
-              </div>
+        {/* FIX: Changed max-w-2xl to max-w-5xl and added flex for two-column layout */}
+        <div className="flex w-full max-w-5xl p-6 space-x-6 bg-white rounded-lg shadow-xl" style={{height: '90vh'}}>
+          
+          {/* Left Column: Form */}
+          <div className="flex flex-col w-1/2">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold text-gray-900">{isEditMode ? 'Edit Expense' : 'Add New Expense'}</h2>
+              <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100"><X /></button>
             </div>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                  <label htmlFor="amount" className="block text-sm font-medium text-gray-700">Amount</label>
-                  <input type="text" id="amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+            <form onSubmit={handleSubmit} className="flex flex-col flex-grow mt-4 space-y-4 overflow-y-auto">
+              {/* Form fields */}
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label htmlFor="title" className="block text-sm font-medium text-gray-700">Title</label>
+                  <input type="text" id="title" value={title} onChange={(e) => setTitle(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                </div>
+                <div>
+                  <label htmlFor="supplier" className="block text-sm font-medium text-gray-700">Supplier / Vendor</label>
+                  <input type="text" id="supplier" value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                </div>
               </div>
-              <div>
-                  <label htmlFor="expenseDate" className="block text-sm font-medium text-gray-700">Expense Date</label>
-                  <input type="date" id="expenseDate" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} required max={getTodayString()} className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                    <label htmlFor="amount" className="block text-sm font-medium text-gray-700">Amount</label>
+                    <input type="text" id="amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                </div>
+                <div>
+                    <label htmlFor="expenseDate" className="block text-sm font-medium text-gray-700">Expense Date</label>
+                    <input type="date" id="expenseDate" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} required max={getTodayString()} className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                </div>
               </div>
-            </div>
-            
-            {!isEditMode && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Attach Receipt</label>
-                <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`flex items-center justify-center w-full px-6 pt-5 pb-6 mt-1 border-2 border-dashed rounded-md transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-gray-300'}`}>
-                  <div className="space-y-1 text-center">
-                    <UploadCloud className="w-12 h-12 mx-auto text-gray-400" />
-                    <div className="flex text-sm text-gray-600">
-                      <label htmlFor="file-upload" className="relative font-medium rounded-md cursor-pointer text-primary hover:text-primary-hover">
-                        <span>Upload a file</span>
-                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={(e) => handleFileChange(e.target.files)} />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
+              
+              {!isEditMode && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">Attach Receipt</label>
+                  <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`flex items-center justify-center w-full px-6 pt-5 pb-6 mt-1 border-2 border-dashed rounded-md transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-gray-300'}`}>
+                    <div className="space-y-1 text-center">
+                      <UploadCloud className="w-12 h-12 mx-auto text-gray-400" />
+                      <div className="flex text-sm text-gray-600">
+                        <label htmlFor="file-upload" className="relative font-medium rounded-md cursor-pointer text-primary hover:text-primary-hover">
+                          <span>Upload a file</span>
+                          <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={(e) => handleFileChange(e.target.files)} />
+                        </label>
+                        <p className="pl-1">or drag and drop</p>
+                      </div>
+                      {receiptFile ? <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>{receiptFile.name}</p> : <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>}
                     </div>
-                    {receiptFile ? <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>{receiptFile.name}</p> : <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>}
                   </div>
                 </div>
-                {scannedBlobId && (
-                  <button type="button" onClick={handleScanReceipt} disabled={isScanning} className="w-full mt-2 inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-400">
-                    <ScanLine className="w-5 h-5 mr-2 -ml-1" />
-                    {isScanning ? 'Scanning...' : 'Verify Scanned Data'}
-                  </button>
-                )}
+              )}
+              
+               <div>
+                <label htmlFor="expenseType" className="block text-sm font-medium text-gray-700">Expense Type</label>
+                <select id="expenseType" value={expenseType} onChange={(e) => setExpenseType(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                  {expenseTypes.map(type => (<option key={type} value={type}>{type}</option>))}
+                </select>
               </div>
-            )}
-            
-             <div>
-              <label htmlFor="expenseType" className="block text-sm font-medium text-gray-700">Expense Type</label>
-              <select id="expenseType" value={expenseType} onChange={(e) => setExpenseType(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
-                {expenseTypes.map(type => (<option key={type} value={type}>{type}</option>))}
-              </select>
-            </div>
-            <div className="flex items-center">
-                <input id="vat_applied" name="vat_applied" type="checkbox" checked={vatApplied} onChange={(e) => setVatApplied(e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
-                <label htmlFor="vat_applied" className="block ml-2 text-sm text-gray-900">VAT Applied</label>
-            </div>
-            {vatApplied && (
-                <div>
-                    <label htmlFor="vatAmount" className="block text-sm font-medium text-gray-700">VAT Amount</label>
-                    <div className="flex items-center mt-1">
-                        <input type="text" id="vatAmount" value={vatAmount} onChange={(e) => setVatAmount(e.target.value.replace(/[^0-9.]/g, ''))} required className="flex-1 w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:ring-primary focus:border-primary" />
-                        <button type="button" onClick={() => setVatAmount(calculateInclusiveVat(amount))} title="Recalculate VAT" className="px-3 py-2 text-gray-600 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-200">
-                            <RefreshCw className="w-5 h-5" />
-                        </button>
-                    </div>
-                </div>
-            )}
-			      <div className="flex items-center">
-                <input id="book_expense" name="book_expense" type="checkbox" checked={book} onChange={(e) => setBook(e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
-                <label htmlFor="book_expense" className="block ml-2 text-sm text-gray-900">Book</label>
-            </div>
+              <div className="flex items-center">
+                  <input id="vat_applied" name="vat_applied" type="checkbox" checked={vatApplied} onChange={(e) => setVatApplied(e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
+                  <label htmlFor="vat_applied" className="block ml-2 text-sm text-gray-900">VAT Applied</label>
+              </div>
+              {vatApplied && (
+                  <div>
+                      <label htmlFor="vatAmount" className="block text-sm font-medium text-gray-700">VAT Amount</label>
+                      <div className="flex items-center mt-1">
+                          <input type="text" id="vatAmount" value={vatAmount} onChange={(e) => setVatAmount(e.target.value.replace(/[^0-9.]/g, ''))} required className="flex-1 w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:ring-primary focus:border-primary" />
+                          <button type="button" onClick={() => setVatAmount(calculateInclusiveVat(amount))} title="Recalculate VAT" className="px-3 py-2 text-gray-600 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-200">
+                              <RefreshCw className="w-5 h-5" />
+                          </button>
+                      </div>
+                  </div>
+              )}
+                <div className="flex items-center">
+                  <input id="book_expense" name="book_expense" type="checkbox" checked={book} onChange={(e) => setBook(e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
+                  <label htmlFor="book_expense" className="block ml-2 text-sm text-gray-900">Book</label>
+              </div>
 
-            {error && <p className="text-sm text-center text-danger">{error}</p>}
-            <div className="flex justify-end pt-4 space-x-2">
-              <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
-              <button type="submit" disabled={isUploading} className="px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-primary hover:bg-primary-hover disabled:bg-gray-400">
-                  {isUploading ? 'Saving...' : `Save ${isEditMode ? 'Changes' : 'Expense'}`}
-              </button>
+              {error && <p className="text-sm text-center text-danger">{error}</p>}
+              <div className="flex justify-end pt-4 mt-auto space-x-2">
+                <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
+                <button type="submit" disabled={isUploading} className="px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-primary hover:bg-primary-hover disabled:bg-gray-400">
+                    {isUploading ? 'Saving...' : `Save ${isEditMode ? 'Changes' : 'Expense'}`}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Right Column: Receipt Preview */}
+          <div className="flex flex-col w-1/2 pl-6 border-l">
+            <h3 className="text-lg font-semibold text-gray-800">Receipt Preview</h3>
+            <div className="flex-grow mt-2 bg-gray-100 rounded-lg">
+              {receiptImageSrc ? (
+                <img src={receiptImageSrc} alt="Receipt Preview" className="object-contain w-full h-full rounded-md"/>
+              ) : (
+                <div className="flex items-center justify-center w-full h-full text-gray-500">
+                  <ImageIcon className="w-16 h-16"/>
+                </div>
+              )}
             </div>
-          </form>
+            {scannedBlobId && (
+              <button type="button" onClick={handleScanReceipt} disabled={isScanning} className="w-full mt-4 inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-400">
+                <ScanLine className="w-5 h-5 mr-2 -ml-1" />
+                {isScanning ? 'Scanning...' : 'Verify Scanned Data'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
       
