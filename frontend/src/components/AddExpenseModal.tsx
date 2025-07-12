@@ -1,9 +1,13 @@
+// frontend/src/components/AddExpenseModal.tsx
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import api from '@/lib/api';
-import { X, Paperclip, UploadCloud, RefreshCw } from 'lucide-react';
+import { X, Paperclip, UploadCloud, RefreshCw, ScanLine } from 'lucide-react';
 import { useAuthStore } from '@/lib/store';
+import { useToastStore } from '@/lib/toastStore';
+import OcrOverlayModal from './OcrOverlayModal';
 
 interface Expense {
   id: string;
@@ -36,27 +40,28 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   const [expenseType, setExpenseType] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [book, setBook] = useState(false);
-
+  
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [scannedBlobId, setScannedBlobId] = useState<string | null>(null);
+
+  const [isOverlayOpen, setOverlayOpen] = useState(false);
+  const [scanResult, setScanResult] = useState<any>(null);
+  const [receiptImageSrc, setReceiptImageSrc] = useState('');
 
   const token = useAuthStore((state) => state.token);
+  const showToast = useToastStore((state) => state.showToast);
   const isEditMode = !!expenseToEdit;
 
-  const handleRecalculateVat = () => {
-    if (amount) {
-        const calculatedVat = (parseFloat(amount) * 0.15).toFixed(2);
-        setVatAmount(calculatedVat);
-    }
+  const calculateInclusiveVat = (totalAmount: string) => {
+    const total = parseFloat(totalAmount);
+    if (isNaN(total) || total <= 0) return '';
+    const vat = total - (total / 1.15);
+    return vat.toFixed(2);
   };
 
-  const handleNumericInputChange = (value: string, setter: (value: string) => void) => {
-    const sanitizedValue = value.replace(/[^0-9.]/g, '');
-    setter(sanitizedValue);
-  };
-
-  // This effect populates the form initially.
   useEffect(() => {
     if (isEditMode && expenseToEdit) {
       setTitle(expenseToEdit.title);
@@ -64,39 +69,125 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
       setExpenseDate(new Date(expenseToEdit.expense_date).toISOString().split('T')[0]);
       setSupplier(expenseToEdit.supplier || '');
       setVatApplied(expenseToEdit.vat_applied);
-      // Directly set the VAT amount from the expense being edited.
       setVatAmount(expenseToEdit.vat_applied ? (expenseToEdit.vat_amount / 100).toFixed(2) : '');
       setExpenseType(expenseToEdit.expense_type || '');
-	  setBook(expenseToEdit.book || false);
+	    setBook(expenseToEdit.book || false);
     } else if (expenseTypes.length > 0) {
       setExpenseType(expenseTypes[0]);
-	  setBook(false);
+	    setBook(false);
       setExpenseDate(getTodayString());
     }
   }, [isEditMode, expenseToEdit, expenseTypes]);
 
-  // This simplified effect handles toggling the VAT checkbox for NEW expenses.
   useEffect(() => {
-    // We only want to auto-calculate for new expenses.
-    // In edit mode, the value is set above and preserved.
-    if (!isEditMode) {
-        if (vatApplied) {
-            handleRecalculateVat();
-        } else {
-            setVatAmount('');
-        }
+    if (vatApplied && amount) {
+      setVatAmount(calculateInclusiveVat(amount));
+    } else {
+      setVatAmount('');
     }
-  }, [vatApplied, isEditMode, amount]);
+  }, [vatApplied, amount]);
 
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) { setReceiptFile(e.target.files[0]); }
+  const handleFileChange = async (files: FileList | null) => {
+    if (files && files[0]) {
+      const file = files[0];
+      setReceiptFile(file);
+      setReceiptImageSrc(URL.createObjectURL(file));
+      const formData = new FormData();
+      formData.append('file', file);
+      try {
+        const uploadResponse = await api.post('/blob/upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
+        });
+        setScannedBlobId(uploadResponse.data.id);
+      } catch (err) {
+        setError('Failed to upload receipt for scanning.');
+        showToast('Failed to upload receipt.', 'error');
+      }
+    }
   };
+
+  const handleScanReceipt = async () => {
+    if (!scannedBlobId) return;
+    setIsScanning(true);
+    setError(null);
+    try {
+      showToast('Scanning receipt... this might take a moment.', 'info');
+      const response = await api.post(`/blob/${scannedBlobId}/scan`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      const { parsedData, overlay } = response.data;
+      setScanResult({ overlay });
+
+      setTitle(parsedData.title || '');
+      setAmount(parsedData.amount ? (parsedData.amount / 100).toFixed(2) : '');
+      setExpenseDate(parsedData.expense_date || getTodayString());
+      setSupplier(parsedData.supplier || '');
+      if (parsedData.vat_amount > 0) {
+        setVatApplied(true);
+        setVatAmount((parsedData.vat_amount / 100).toFixed(2));
+      }
+
+      showToast('Scan complete. Please verify the details.', 'success');
+      setOverlayOpen(true);
+    } catch (err: any) {
+      const errorMessage = err.response?.data?.message || 'Failed to scan receipt.';
+      setError(errorMessage);
+      showToast(errorMessage, 'error');
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
+  const handleOverlayConfirm = (data: { total: string; date: string; supplier: string; vat: string }) => {
+    const parseDate = (dateStr: string): string | null => {
+        if (!dateStr) return null;
+        const match = dateStr.match(/(\d{1,2}[\s\/\-.]\d{1,2}[\s\/\-.]\d{4})/);
+        if (!match || !match[0]) return null;
+        
+        const cleanedDateStr = match[0].replace(/\s/g, '').replace(/[\-.]/g, '/');
+        const parts = cleanedDateStr.split('/');
+        if (parts.length === 3) {
+            const [day, month, year] = parts;
+            const isoDateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+            if (!isNaN(new Date(isoDateStr).getTime())) {
+                return isoDateStr;
+            }
+        }
+        return null;
+    };
+
+    const parseCurrency = (currencyStr: string): string => {
+        if (!currencyStr) return '';
+        const match = currencyStr.match(/(\d[\d\s,]*\.\d{2})/);
+        return match ? match[0].replace(/[\s,]/g, '') : '';
+    };
+
+    setSupplier(data.supplier);
+    setTitle(data.supplier);
+    
+    const formattedDate = parseDate(data.date);
+    if (formattedDate) {
+        setExpenseDate(formattedDate);
+    } else {
+        showToast(`Could not parse date: "${data.date}". Please enter it manually.`, 'error');
+    }
+
+    setAmount(parseCurrency(data.total));
+    
+    const parsedVat = parseCurrency(data.vat);
+    if (parsedVat) {
+      setVatApplied(true);
+      setVatAmount(parsedVat);
+    }
+  };
+  
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(true); };
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(false); };
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault(); setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) { setReceiptFile(e.dataTransfer.files[0]); }
+    e.preventDefault();
+    setIsDragging(false);
+    handleFileChange(e.dataTransfer.files);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,10 +201,11 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
         supplier,
         amount: Math.round(parseFloat(amount) * 100),
         expense_date: expenseDate,
-		book: book,
+		    book: book,
         vat_applied: vatApplied,
         expense_type: expenseType,
         currency_code: 'ZAR',
+        receipt_blob_id: scannedBlobId,
       };
 
       if (vatApplied) {
@@ -125,37 +217,27 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
           headers: { Authorization: `Bearer ${token}` }
         });
       } else {
-        let receiptBlobId: string | null = null;
-        if (receiptFile) {
-          const formData = new FormData();
-          formData.append('file', receiptFile);
-          const uploadResponse = await api.post('/blob/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
-          });
-          receiptBlobId = uploadResponse.data.id;
-        }
-        await api.post('/expense', {...payload, receipt_blob_id: receiptBlobId}, {
+        await api.post('/expense', payload, {
           headers: { Authorization: `Bearer ${token}` }
         });
       }
-
       onExpenseAdded();
     } catch (err: any) {
       setError(err.response?.data?.message || `Failed to ${isEditMode ? 'update' : 'add'} expense.`);
-      console.error(err);
     } finally {
       setIsUploading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="w-full max-w-2xl p-6 bg-white rounded-lg shadow-xl">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-gray-900">{isEditMode ? 'Edit Expense' : 'Add New Expense'}</h2>
-          <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100"><X /></button>
-        </div>
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+    <>
+      <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50">
+        <div className="w-full max-w-2xl p-6 bg-white rounded-lg shadow-xl">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-gray-900">{isEditMode ? 'Edit Expense' : 'Add New Expense'}</h2>
+            <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100"><X /></button>
+          </div>
+          <form onSubmit={handleSubmit} className="mt-4 space-y-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="title" className="block text-sm font-medium text-gray-700">Title</label>
@@ -169,33 +251,43 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                   <label htmlFor="amount" className="block text-sm font-medium text-gray-700">Amount</label>
-                  <input type="text" id="amount" value={amount} onChange={(e) => handleNumericInputChange(e.target.value, setAmount)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                  <input type="text" id="amount" value={amount} onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ''))} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
               </div>
               <div>
                   <label htmlFor="expenseDate" className="block text-sm font-medium text-gray-700">Expense Date</label>
-                  <input
-                    type="date"
-                    id="expenseDate"
-                    value={expenseDate}
-                    onChange={(e) => setExpenseDate(e.target.value)}
-                    required
-                    max={getTodayString()}
-                    className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
-                  />
+                  <input type="date" id="expenseDate" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} required max={getTodayString()} className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
               </div>
             </div>
-            <div>
+            
+            {!isEditMode && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Attach Receipt</label>
+                <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`flex items-center justify-center w-full px-6 pt-5 pb-6 mt-1 border-2 border-dashed rounded-md transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-gray-300'}`}>
+                  <div className="space-y-1 text-center">
+                    <UploadCloud className="w-12 h-12 mx-auto text-gray-400" />
+                    <div className="flex text-sm text-gray-600">
+                      <label htmlFor="file-upload" className="relative font-medium rounded-md cursor-pointer text-primary hover:text-primary-hover">
+                        <span>Upload a file</span>
+                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={(e) => handleFileChange(e.target.files)} />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
+                    {receiptFile ? <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>{receiptFile.name}</p> : <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>}
+                  </div>
+                </div>
+                {scannedBlobId && (
+                  <button type="button" onClick={handleScanReceipt} disabled={isScanning} className="w-full mt-2 inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-400">
+                    <ScanLine className="w-5 h-5 mr-2 -ml-1" />
+                    {isScanning ? 'Scanning...' : 'Verify Scanned Data'}
+                  </button>
+                )}
+              </div>
+            )}
+            
+             <div>
               <label htmlFor="expenseType" className="block text-sm font-medium text-gray-700">Expense Type</label>
-              <select
-                id="expenseType"
-                value={expenseType}
-                onChange={(e) => setExpenseType(e.target.value)}
-                required
-                className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary"
-              >
-                {expenseTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                ))}
+              <select id="expenseType" value={expenseType} onChange={(e) => setExpenseType(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
+                {expenseTypes.map(type => (<option key={type} value={type}>{type}</option>))}
               </select>
             </div>
             <div className="flex items-center">
@@ -206,35 +298,18 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
                 <div>
                     <label htmlFor="vatAmount" className="block text-sm font-medium text-gray-700">VAT Amount</label>
                     <div className="flex items-center mt-1">
-                        <input type="text" id="vatAmount" value={vatAmount} onChange={(e) => handleNumericInputChange(e.target.value, setVatAmount)} required className="flex-1 w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:ring-primary focus:border-primary" />
-                        <button type="button" onClick={handleRecalculateVat} title="Recalculate VAT" className="px-3 py-2 text-gray-600 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-200">
+                        <input type="text" id="vatAmount" value={vatAmount} onChange={(e) => setVatAmount(e.target.value.replace(/[^0-9.]/g, ''))} required className="flex-1 w-full px-3 py-2 border border-gray-300 rounded-l-md shadow-sm focus:ring-primary focus:border-primary" />
+                        <button type="button" onClick={() => setVatAmount(calculateInclusiveVat(amount))} title="Recalculate VAT" className="px-3 py-2 text-gray-600 bg-gray-100 border border-l-0 border-gray-300 rounded-r-md hover:bg-gray-200">
                             <RefreshCw className="w-5 h-5" />
                         </button>
                     </div>
                 </div>
             )}
-			<div className="flex items-center">
+			      <div className="flex items-center">
                 <input id="book_expense" name="book_expense" type="checkbox" checked={book} onChange={(e) => setBook(e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
                 <label htmlFor="book_expense" className="block ml-2 text-sm text-gray-900">Book</label>
             </div>
-            {!isEditMode && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Attach Receipt</label>
-                <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`flex items-center justify-center w-full px-6 pt-5 pb-6 mt-1 border-2 border-dashed rounded-md transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-gray-300'}`}>
-                  <div className="space-y-1 text-center">
-                    <UploadCloud className="w-12 h-12 mx-auto text-gray-400" />
-                    <div className="flex text-sm text-gray-600">
-                      <label htmlFor="file-upload" className="relative font-medium rounded-md cursor-pointer text-primary hover:text-primary-hover">
-                        <span>Upload a file</span>
-                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={handleFileChange} />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
-                    </div>
-                    {receiptFile ? <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>{receiptFile.name}</p> : <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>}
-                  </div>
-                </div>
-              </div>
-            )}
+
             {error && <p className="text-sm text-center text-danger">{error}</p>}
             <div className="flex justify-end pt-4 space-x-2">
               <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
@@ -242,8 +317,19 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
                   {isUploading ? 'Saving...' : `Save ${isEditMode ? 'Changes' : 'Expense'}`}
               </button>
             </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </div>
+      
+      {isOverlayOpen && scanResult && (
+        <OcrOverlayModal
+          isOpen={isOverlayOpen}
+          onClose={() => setOverlayOpen(false)}
+          onConfirm={handleOverlayConfirm}
+          scanResult={scanResult}
+          imageSrc={receiptImageSrc}
+        />
+      )}
+    </>
   );
 }

@@ -39,14 +39,13 @@ import { EmailModule } from './email/email.module';
     // --- Database Connection for Blob Storage ---
     TypeOrmModule.forRoot({
       type: 'postgres',
-      host: process.env.POSTGRES_HOST,
-      // FIX: Provide a default value to satisfy TypeScript
+      host: process.env.POSTGRES_BLOB_HOST, // <-- FIX
       port: parseInt(process.env.POSTGRES_BLOB_PORT || '5433', 10),
       username: process.env.POSTGRES_USER,
       password: process.env.POSTGRES_PASSWORD,
       database: process.env.POSTGRES_BLOB_DB,
       autoLoadEntities: true,
-      synchronize: true, // DEV only, use migrations in prod
+      synchronize: true,
       name: 'blob_db',
     }),
 

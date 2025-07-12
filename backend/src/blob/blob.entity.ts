@@ -2,7 +2,7 @@
 
 import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
 
-@Entity({ name: 'blobs', database: 'expense_blobs' }) // Specify the correct database
+@Entity({ name: 'blobs' }) // The hardcoded database has been removed
 export class Blob {
   @PrimaryGeneratedColumn('uuid')
   id: string;

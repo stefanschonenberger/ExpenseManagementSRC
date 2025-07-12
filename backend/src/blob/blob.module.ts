@@ -1,16 +1,19 @@
-// src/blob/blob.module.ts
+// backend/src/blob/blob.module.ts
+
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { Blob } from './blob.entity';
 import { BlobService } from './blob.service';
 import { BlobController } from './blob.controller';
+import { OcrModule } from 'src/ocr/ocr.module'; // Import the OcrModule
 
 @Module({
-  // Use the named connection 'blob_db' we created in app.module.ts
-  imports: [TypeOrmModule.forFeature([Blob], 'blob_db')],
+  imports: [
+    TypeOrmModule.forFeature([Blob], 'blob_db'),
+    OcrModule, // Add OcrModule here so BlobModule knows about OcrService
+  ],
   providers: [BlobService],
-  // Export BlobService so other modules can use it
-  exports: [BlobService],
   controllers: [BlobController],
+  exports: [BlobService],
 })
 export class BlobModule {}
