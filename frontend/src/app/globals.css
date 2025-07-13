@@ -3,3 +3,14 @@
 @tailwind base;
 @tailwind component;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --primary: #0A74DA; /* A nice, modern blue */
+    --primary-hover: #085da9;
+    --success: #10B981; /* A vibrant green */
+    --success-hover: #059669;
+    --danger: #EF4444;
+    --danger-hover: #DC2626;
+  }
+}

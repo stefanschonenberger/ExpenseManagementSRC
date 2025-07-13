@@ -1,3 +1,5 @@
+// backend/src/expense-report/expense-report.service.ts
+
 import {
   Injectable,
   BadRequestException,
@@ -16,7 +18,7 @@ import { SubmitReportDto } from './dto/submit-report.dto';
 import { ManagementRelationship } from 'src/user/entities/management-relationship.entity';
 import { RejectReportDto } from './dto/reject-report.dto';
 import { EmailService } from 'src/email/email.service';
-import { PdfGenerationService } from 'src/pdf/pdf.service';
+import { PdfService } from 'src/pdf/pdf.service';
 import { AdminService } from 'src/admin/admin.service';
 
 @Injectable()
@@ -33,7 +35,7 @@ export class ExpenseReportService {
     @InjectRepository(ManagementRelationship)
     private readonly managementRepository: Repository<ManagementRelationship>,
     private readonly emailService: EmailService,
-    private readonly pdfGenerationService: PdfGenerationService,
+    private readonly pdfService: PdfService,
     private readonly adminService: AdminService,
   ) {}
 
@@ -233,7 +235,7 @@ export class ExpenseReportService {
 
     try {
       this.logger.log(`Generating PDF for approved report ${report.id}`);
-      const pdfBuffer = await this.pdfGenerationService.generateReportPdf(report);
+      const pdfBuffer = await this.pdfService.generatePdf(report);
       
       this.logger.log(`Fetching settings to get finance email.`);
       const settings = await this.adminService.getSettings();
@@ -289,6 +291,6 @@ export class ExpenseReportService {
       throw new ForbiddenException('PDFs can only be generated for approved reports.');
     }
     
-    return this.pdfGenerationService.generateReportPdf(report);
+    return this.pdfService.generatePdf(report);
   }
 }

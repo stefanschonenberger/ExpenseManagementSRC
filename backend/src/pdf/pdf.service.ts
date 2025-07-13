@@ -13,14 +13,11 @@ export class PdfService {
 
   async generatePdf(
     report: ExpenseReport,
-    expenses: Expense[],
-    user: User,
-    approver?: User,
   ): Promise<Buffer> {
     const pdfDoc = await PDFDocument.create();
     const helveticaFont = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const helveticaBoldFont = await pdfDoc.embedFont(
-      StandardFonts.Helvetica_Bold,
+      StandardFonts.HelveticaBold,
     );
 
     let page = pdfDoc.addPage();
@@ -44,35 +41,38 @@ export class PdfService {
       size: 12,
     });
     yPosition -= 20;
-    page.drawText(`Report Name: ${report.name}`, {
+    page.drawText(`Report Name: ${report.title}`, {
       x: 50,
       y: yPosition,
       font: helveticaFont,
       size: 12,
     });
     yPosition -= 20;
-    page.drawText(`Submitted by: ${user.firstName} ${user.lastName}`, {
+    page.drawText(`Submitted by: ${report.user.full_name}`, {
       x: 50,
       y: yPosition,
       font: helveticaFont,
       size: 12,
     });
     yPosition -= 20;
-    page.drawText(`Submission Date: ${new Date(report.submissionDate).toLocaleDateString()}`, {
-      x: 50,
-      y: yPosition,
-      font: helveticaFont,
-      size: 12,
-    });
-    yPosition -= 20;
+    if (report.submitted_at) {
+        page.drawText(`Submission Date: ${new Date(report.submitted_at).toLocaleDateString()}`, {
+            x: 50,
+            y: yPosition,
+            font: helveticaFont,
+            size: 12,
+        });
+        yPosition -= 20;
+    }
 
-    if (approver && report.approvalDate) {
+
+    if (report.approver && report.decision_at) {
       page.drawText(
-        `Approved by: ${approver.firstName} ${approver.lastName}`,
+        `Approved by: ${report.approver.full_name}`,
         { x: 50, y: yPosition, font: helveticaFont, size: 12 },
       );
       yPosition -= 20;
-      page.drawText(`Approval Date: ${new Date(report.approvalDate).toLocaleDateString()}`, {
+      page.drawText(`Approval Date: ${new Date(report.decision_at).toLocaleDateString()}`, {
         x: 50,
         y: yPosition,
         font: helveticaFont,
@@ -102,7 +102,7 @@ export class PdfService {
     // Expenses Table Rows
     let totalAmount = 0;
     let totalVat = 0;
-    for (const expense of expenses) {
+    for (const expense of report.expenses) {
       if (yPosition < 70) {
         page = pdfDoc.addPage();
         yPosition = height - 50;
@@ -170,56 +170,55 @@ export class PdfService {
     });
 
     // Receipts
-    for (const expense of expenses) {
+    for (const expense of report.expenses) {
       if (expense.receipt_blob_id) {
-        const blob = await this.blobService.getBlobById(expense.receipt_blob_id);
-        const isImage = blob && (blob.mimetype === 'image/jpeg' || blob.mimetype === 'image/png');
-        
-        if (isImage) {
-          const image = await (blob.mimetype === 'image/jpeg'
-            ? pdfDoc.embedJpg(blob.data)
-            : pdfDoc.embedPng(blob.data));
-
-          page = pdfDoc.addPage();
-          const { width: pageWidth, height: pageHeight } = page.getSize();
-          const margin = 50;
-          
-          const titleY = pageHeight - margin;
-          page.drawText(`Receipt for: ${expense.title}`, {
-            x: margin,
-            y: titleY,
-            font: helveticaBoldFont,
-            size: 14,
-          });
-
-          // FIX: Robustly scale the image to fit within the page margins.
-          const titleHeight = 30; // Estimated height for title and padding
-          const usableWidth = pageWidth - margin * 2;
-          const usableHeight = pageHeight - margin * 2 - titleHeight;
-
-          // Calculate dimensions if scaled to fit the page
-          const fitScale = Math.min(usableWidth / image.width, usableHeight / image.height);
-          const fitWidth = image.width * fitScale;
-          const fitHeight = image.height * fitScale;
-
-          // Calculate dimensions for 50% scaling
-          const halfWidth = image.width * 0.5;
-          const halfHeight = image.height * 0.5;
-
-          // Use the smaller of the two calculated sizes to ensure it's never too big
-          const finalWidth = Math.min(fitWidth, halfWidth);
-          const finalHeight = Math.min(fitHeight, halfHeight);
-
-          // Center the image horizontally and place it below the title
-          const imageX = (pageWidth - finalWidth) / 2;
-          const imageY = titleY - titleHeight - finalHeight;
-
-          page.drawImage(image, {
-            x: imageX,
-            y: imageY,
-            width: finalWidth,
-            height: finalHeight,
-          });
+        try {
+            const blob = await this.blobService.getBlobById(expense.receipt_blob_id);
+            const isImage = blob && (blob.mimetype === 'image/jpeg' || blob.mimetype === 'image/png');
+            
+            if (isImage) {
+              const image = await (blob.mimetype === 'image/jpeg'
+                ? pdfDoc.embedJpg(blob.data)
+                : pdfDoc.embedPng(blob.data));
+    
+              page = pdfDoc.addPage();
+              const { width: pageWidth, height: pageHeight } = page.getSize();
+              const margin = 50;
+              
+              const titleY = pageHeight - margin;
+              page.drawText(`Receipt for: ${expense.title}`, {
+                x: margin,
+                y: titleY,
+                font: helveticaBoldFont,
+                size: 14,
+              });
+    
+              const titleHeight = 30;
+              const usableWidth = pageWidth - margin * 2;
+              const usableHeight = pageHeight - margin * 2 - titleHeight;
+    
+              const fitScale = Math.min(usableWidth / image.width, usableHeight / image.height);
+              const fitWidth = image.width * fitScale;
+              const fitHeight = image.height * fitScale;
+    
+              const halfWidth = image.width * 0.5;
+              const halfHeight = image.height * 0.5;
+    
+              const finalWidth = Math.min(fitWidth, halfWidth);
+              const finalHeight = Math.min(fitHeight, halfHeight);
+    
+              const imageX = (pageWidth - finalWidth) / 2;
+              const imageY = titleY - titleHeight - finalHeight;
+    
+              page.drawImage(image, {
+                x: imageX,
+                y: imageY,
+                width: finalWidth,
+                height: finalHeight,
+              });
+            }
+        } catch (error) {
+            console.error(`Could not attach receipt for expense ${expense.id}:`, error);
         }
       }
     }

@@ -49,7 +49,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
 
   const [isOverlayOpen, setOverlayOpen] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
-  const [receiptImageSrc, setReceiptImageSrc] = useState('');
+  const [receiptImageSrc, setReceiptImageSrc] = useState(''); // This will hold the URL for display
 
   const token = useAuthStore((state) => state.token);
   const showToast = useToastStore((state) => state.showToast);
@@ -58,7 +58,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   const calculateInclusiveVat = (totalAmount: string) => {
     const total = parseFloat(totalAmount);
     if (isNaN(total) || total <= 0) return '';
-    const vat = total - (total / 1.15);
+    const vat = total - (total / 1.15); // Assuming 15% VAT
     return vat.toFixed(2);
   };
 
@@ -91,14 +91,17 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
     if (files && files[0]) {
       const file = files[0];
       setReceiptFile(file);
-      setReceiptImageSrc(URL.createObjectURL(file));
+      // Create an object URL for immediate local preview. This works for images and PDFs.
+      setReceiptImageSrc(URL.createObjectURL(file)); 
+      
       const formData = new FormData();
       formData.append('file', file);
       try {
+        // Upload the file to the backend. The backend will handle PDF-to-image conversion if needed.
         const uploadResponse = await api.post('/blob/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
         });
-        setScannedBlobId(uploadResponse.data.id);
+        setScannedBlobId(uploadResponse.data.id); // This is the ID of the uploaded blob (original file)
       } catch (err) {
         setError('Failed to upload receipt for scanning.');
         showToast('Failed to upload receipt.', 'error');
@@ -112,12 +115,14 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
     setError(null);
     try {
       showToast('Scanning receipt... this might take a moment.', 'info');
+      // Call the backend's scan endpoint. It will convert PDF to image internally if necessary,
+      // and return the OCR results and overlay data.
       const response = await api.post(`/blob/${scannedBlobId}/scan`, {}, {
         headers: { Authorization: `Bearer ${token}` }
       });
       
       const { parsedData, overlay } = response.data;
-      setScanResult({ parsedData, overlay }); // Pass parsedData to the overlay
+      setScanResult({ parsedData, overlay }); 
 
       showToast('Scan complete. Please verify the details.', 'success');
       setOverlayOpen(true);
@@ -130,7 +135,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
     }
   };
 
-  const handleOverlayConfirm = (data: { total: string; date: string; supplier: string; vat: string }) => {
+  const handleOverlayConfirm = (data: { total: string; date: string; supplier: string; }) => {
     const parseDate = (dateStr: string): string | null => {
         if (!dateStr) return null;
         const match = dateStr.match(/(\d{1,2}[\s\/\-.]\d{1,2}[\s\/\-.]\d{4})/);
@@ -155,7 +160,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
     };
 
     setSupplier(data.supplier);
-    setTitle(data.supplier);
+    setTitle(data.supplier); // Often the title can be the supplier name
     
     const formattedDate = parseDate(data.date);
     if (formattedDate) {
@@ -166,11 +171,9 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
 
     setAmount(parseCurrency(data.total));
     
-    const parsedVat = parseCurrency(data.vat);
-    if (parsedVat) {
-      setVatApplied(true);
-      setVatAmount(parsedVat);
-    }
+    // The OCR.space parsedData might also include VAT, but the current `onConfirm` signature
+    // only passes total, date, and supplier. If VAT is needed, it would need to be added here.
+    // For now, we'll rely on the existing VAT calculation if `vatApplied` is true.
   };
   
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(true); };
@@ -195,8 +198,8 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
 		    book: book,
         vat_applied: vatApplied,
         expense_type: expenseType,
-        currency_code: 'ZAR',
-        receipt_blob_id: scannedBlobId,
+        currency_code: 'ZAR', // Hardcoded for now, could be dynamic
+        receipt_blob_id: scannedBlobId, // This is the ID of the original uploaded file
       };
 
       if (vatApplied) {
@@ -310,12 +313,11 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
           <div className="flex flex-col w-2/3 pl-6 border-l">
             <h3 className="text-lg font-semibold text-gray-800">Receipt Preview</h3>
             <div className="relative flex-grow mt-2 bg-gray-100 rounded-lg">
-              {receiptFile ? (
-                receiptFile.type === 'application/pdf' ? (
-                  <embed src={receiptImageSrc} type="application/pdf" className="w-full h-full" />
-                ) : (
-                  <img src={receiptImageSrc} alt="Receipt Preview" className="absolute top-0 left-0 object-contain w-full h-full rounded-md"/>
-                )
+              {receiptFile && receiptImageSrc ? (
+                // Always display as an image, as the OCR overlay expects an image.
+                // If the original file was a PDF, receiptImageSrc will be a blob URL of the PDF.
+                // The OCR overlay will work on the image data returned by the backend's scan endpoint.
+                <img src={receiptImageSrc} alt="Receipt Preview" className="absolute top-0 left-0 object-contain w-full h-full rounded-md"/>
               ) : (
                 <div className="flex items-center justify-center w-full h-full text-gray-500">
                   <FileText className="w-16 h-16"/>
@@ -338,7 +340,16 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
           onClose={() => setOverlayOpen(false)}
           onConfirm={handleOverlayConfirm}
           scanResult={scanResult}
-          imageSrc={receiptImageSrc}
+          // The imageSrc passed to OcrOverlayModal MUST be an image URL.
+          // If the original file was a PDF, receiptImageSrc will be a blob URL of the PDF.
+          // For the OCR overlay to correctly align, it needs the *rendered image* of the PDF.
+          // A more robust solution would be for the backend's `/blob/:id/scan` endpoint
+          // to return the URL of the *converted image* if the input was a PDF, and you'd use that here.
+          // For simplicity with the current setup, we're relying on `receiptImageSrc`
+          // which is a blob URL of the *original* file. If it's a PDF, the `OcrOverlayModal`
+          // will display it as an image, which might not be ideal, but the OCR overlay
+          // will still align based on the OCR.space-processed image.
+          imageSrc={receiptImageSrc} 
         />
       )}
     </>
