@@ -22,6 +22,11 @@ export class OcrService {
     private readonly httpService: HttpService,
   ) {}
 
+  private getGhostscriptExecutable(): string {
+    // Read from environment variable, default to 'gs' for Linux/macOS environments
+    return this.configService.get<string>('GHOSTSCRIPT_PATH', 'gs');
+  }
+
   /**
    * Counts the number of pages in a PDF buffer using Ghostscript.
    * @param pdfBuffer The buffer containing the PDF file data.
@@ -30,6 +35,8 @@ export class OcrService {
   public async getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
     const tempDir = os.tmpdir();
     const inputPdfPath = path.join(tempDir, `info_${Date.now()}.pdf`);
+    const gsExecutable = this.getGhostscriptExecutable();
+
     try {
       await fs.writeFile(inputPdfPath, pdfBuffer);
       // NOTE: Ensure Ghostscript is installed and in the system's PATH.
@@ -65,6 +72,7 @@ export class OcrService {
     const tempDir = os.tmpdir();
     const inputPdfPath = path.join(tempDir, `input_${Date.now()}_p${pageNumber}.pdf`);
     const outputPngPath = path.join(tempDir, `output_${Date.now()}_p${pageNumber}.png`);
+    const gsExecutable = this.getGhostscriptExecutable();
 
     try {
       await fs.writeFile(inputPdfPath, pdfBuffer);

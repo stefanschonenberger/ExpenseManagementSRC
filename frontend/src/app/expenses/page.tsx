@@ -8,22 +8,7 @@ import { useAuthStore } from '@/lib/store';
 import Tabs from '@/components/ui/Tabs';
 import ExpenseTable from '@/components/ExpenseTable';
 import { useToastStore } from '@/lib/toastStore';
-
-// The full interface for an expense object
-interface Expense {
-  id: string;
-  title: string;
-  amount: number;
-  vat_amount: number;
-  expense_date: string;
-  status: string;
-  currency_code: string;
-  receipt_blob_id: string | null;
-  supplier: string | null;
-  vat_applied: boolean;
-  expense_type: string;
-  book: boolean;
-}
+import { Expense } from '@/types'; // Import the canonical Expense type
 
 export default function ExpensesPage() {
   const [allExpenses, setAllExpenses] = useState<Expense[]>([]);

@@ -8,17 +8,7 @@ import { useAuthStore } from '@/lib/store';
 import api from '@/lib/api';
 import ReceiptPreviewModal from './ReceiptPreviewModal';
 import { formatCurrency } from '@/lib/utils';
-
-interface Expense {
-  id: string;
-  title: string;
-  amount: number;
-  expense_date: string;
-  supplier: string | null;
-  vat_applied: boolean;
-  vat_amount: number;
-  receipt_blob_id: string | null;
-}
+import { Expense } from '@/types'; // Import the canonical Expense type
 
 interface ExpenseTableProps {
   expenses: Expense[];

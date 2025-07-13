@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Check, DollarSign, Calendar, Building } from 'lucide-react';
+import { X, Check, DollarSign, Calendar, Building, FileText } from 'lucide-react'; // FIX: Added FileText import
 
 interface OcrWord {
   WordText: string;
@@ -30,8 +30,7 @@ interface OcrOverlayModalProps {
   onClose: () => void;
   onConfirm: (data: { total: string; date: string; supplier: string; }) => void;
   scanResult: { overlay: OcrOverlay; parsedData: any };
-  imageSrc: string; // This is the URL to the OCR'd image
-  // FIX: Add new props for initial values
+  imageSrc: string;
   initialSupplier: string;
   initialDate: string;
   initialTotal: string;
@@ -40,7 +39,6 @@ interface OcrOverlayModalProps {
 type SelectionMode = 'supplier' | 'date' | 'total';
 
 export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult, imageSrc, initialSupplier, initialDate, initialTotal }: OcrOverlayModalProps) {
-  // FIX: Initialize state with empty strings. Values will be set in useEffect.
   const [selectedSupplier, setSelectedSupplier] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [selectedTotal, setSelectedTotal] = useState('');
@@ -57,28 +55,23 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // FIX: This useEffect will now correctly prioritize initial props, then OCR data
   useEffect(() => {
     if (isOpen) {
-      // Prioritize the `initial` props (which come from AddExpenseModal's current form state)
-      // If `initial` prop is empty, then fall back to OCR parsed data.
       setSelectedSupplier(initialSupplier || scanResult?.parsedData?.supplier || '');
       setSelectedDate(initialDate || scanResult?.parsedData?.expense_date || '');
       setSelectedTotal(initialTotal || (scanResult?.parsedData?.amount ? (scanResult.parsedData.amount / 100).toFixed(2) : ''));
     }
-  }, [isOpen, initialSupplier, initialDate, initialTotal, scanResult]); // Dependencies ensure this runs when relevant data changes
+  }, [isOpen, initialSupplier, initialDate, initialTotal, scanResult]);
 
 
-  // FIX: Make handleImageLoad a useCallback to prevent unnecessary re-creations
   const handleImageLoad = useCallback(() => {
     if (imageRef.current && containerRef.current) {
         const { clientWidth: containerWidth, clientHeight: containerHeight } = containerRef.current;
         const { naturalWidth, naturalHeight } = imageRef.current;
 
-        // Ensure natural dimensions are valid before proceeding
         if (naturalWidth === 0 || naturalHeight === 0) {
             console.warn("Image natural dimensions are zero, cannot calculate overlay positions.");
-            return; // Exit if image hasn't loaded or is broken
+            return;
         }
 
         const containerAspectRatio = containerWidth / containerHeight;
@@ -93,7 +86,6 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
             displayedWidth = containerHeight * imageAspectRatio;
         }
         
-        // Ensure displayed dimensions are not zero
         if (displayedWidth === 0 || displayedHeight === 0) {
             console.warn("Calculated displayed dimensions are zero.");
             return;
@@ -103,30 +95,22 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
         const offsetY = (containerHeight - displayedHeight) / 2;
 
         setImageDimensions({ displayedWidth, displayedHeight, naturalWidth, naturalHeight, offsetX, offsetY });
-        console.log("Image dimensions calculated:", { displayedWidth, displayedHeight, naturalWidth, naturalHeight, offsetX, offsetY });
-    } else {
-        console.log("Image ref or container ref not available for dimension calculation.");
     }
-  }, []); // No dependencies, as it only uses refs
+  }, []);
 
-  // Attach resize listener
   useEffect(() => {
     window.addEventListener('resize', handleImageLoad);
     return () => window.removeEventListener('resize', handleImageLoad);
-  }, [handleImageLoad]); // Dependency on handleImageLoad
+  }, [handleImageLoad]);
 
-  // Trigger image load calculation when modal opens or imageSrc changes
   useEffect(() => {
     if (isOpen && imageSrc) {
-      // Clear previous dimensions to force recalculation on new imageSrc
       setImageDimensions({ displayedWidth: 0, displayedHeight: 0, naturalWidth: 0, naturalHeight: 0, offsetX: 0, offsetY: 0 });
-      // The `onLoad` event on the <img> tag is the primary trigger.
-      // We can also try to call it directly if the image is already cached.
       if (imageRef.current?.complete) {
         handleImageLoad();
       }
     }
-  }, [isOpen, imageSrc, handleImageLoad]); // Dependencies on isOpen, imageSrc, and handleImageLoad
+  }, [isOpen, imageSrc, handleImageLoad]);
 
   if (!isOpen) return null;
 
@@ -245,7 +229,7 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
         </div>
         <div className="flex justify-end flex-shrink-0 pt-4 mt-4 border-t">
           <button onClick={onClose} type="button" className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
-          <button onClick={handleConfirm} type="submit" className="inline-flex items-center justify-center px-4 py-2 ml-3 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-primary hover:bg-primary-hover">
+          <button onClick={handleConfirm} type="button" className="inline-flex items-center justify-center px-4 py-2 ml-3 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-primary hover:bg-primary-hover">
             <Check className="w-4 h-4 mr-2"/>
             Confirm Selections
           </button>

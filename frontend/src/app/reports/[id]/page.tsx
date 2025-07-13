@@ -11,26 +11,9 @@ import { Download, Edit, Trash2, Send, Loader2, ArrowLeft, AlertTriangle } from 
 import SubmitReportModal from '@/components/SubmitReportModal';
 import { useToastStore } from '@/lib/toastStore';
 import ReceiptPreviewModal from '@/components/ReceiptPreviewModal';
-import EditReportExpensesModal from '@/components/EditReportExpensesModal'; // Import the new modal
+import EditReportExpensesModal from '@/components/EditReportExpensesModal';
 import Link from 'next/link';
-
-interface Expense {
-  id: string;
-  title: string;
-  amount: number;
-  expense_date: string;
-  supplier: string | null;
-  vat_applied: boolean;
-  vat_amount: number;
-  receipt_blob_id: string | null;
-}
-
-interface Report {
-  id: string;
-  title: string;
-  status: 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED';
-  rejection_reason: string | null;
-}
+import { Expense, Report } from '@/types'; // Import the canonical types
 
 export default function ReportDetailsPage() {
     const { id } = useParams();
