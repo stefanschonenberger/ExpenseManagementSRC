@@ -19,6 +19,7 @@ interface Expense {
   expense_type: string;
   book: boolean;
   vat_amount: number;
+  receipt_blob_id: string | null; // Ensure this is part of the interface
 }
 
 interface AddExpenseModalProps {
@@ -48,8 +49,16 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   const [scannedBlobId, setScannedBlobId] = useState<string | null>(null);
 
   const [isOverlayOpen, setOverlayOpen] = useState(false);
-  const [scanResult, setScanResult] = useState<any>(null);
-  const [receiptImageSrc, setReceiptImageSrc] = useState(''); // This will hold the URL for display
+  const [scanResult, setScanResult] = useState<{ parsedData: any; overlay: any; ocrImageBlobId: string } | null>(null);
+  const [receiptImageSrc, setReceiptImageSrc] = useState(''); // For initial preview in this modal
+  const [receiptMimeType, setReceiptMimeType] = useState<string | null>(null); // To store the fetched mimetype
+  const [ocrOverlayImageSrc, setOcrOverlayImageSrc] = useState(''); // For the OcrOverlayModal
+
+  // FIX: New state variables to remember last confirmed OCR overlay selections (raw strings)
+  const [rememberedOcrSupplier, setRememberedOcrSupplier] = useState('');
+  const [rememberedOcrDate, setRememberedOcrDate] = useState('');
+  const [rememberedOcrTotal, setRememberedOcrTotal] = useState('');
+
 
   const token = useAuthStore((state) => state.token);
   const showToast = useToastStore((state) => state.showToast);
@@ -63,6 +72,46 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   };
 
   useEffect(() => {
+    const loadExistingReceipt = async () => {
+      if (isEditMode && expenseToEdit?.receipt_blob_id) {
+        setScannedBlobId(expenseToEdit.receipt_blob_id);
+        const existingReceiptUrl = `${api.defaults.baseURL}/blob/${expenseToEdit.receipt_blob_id}`;
+        setReceiptImageSrc(existingReceiptUrl);
+
+        try {
+          // Fetch the head of the blob to get its mimetype without downloading the whole file
+          const response = await api.head(existingReceiptUrl, {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          const mime = response.headers['content-type'];
+          setReceiptMimeType(mime || null);
+          console.log(`Fetched existing receipt mimetype: ${mime}`);
+
+          // If the existing receipt is an image, it can also serve as the OCR overlay image initially.
+          // If it's a PDF, the OCR overlay image will only be available after a scan.
+          if (mime && mime.startsWith('image/')) {
+            setOcrOverlayImageSrc(existingReceiptUrl);
+          } else {
+            setOcrOverlayImageSrc(''); // Clear if it's a PDF or unknown type
+          }
+
+        } catch (err) {
+          console.error("Failed to fetch existing receipt mimetype:", err);
+          setReceiptMimeType(null);
+          setReceiptImageSrc(''); // Clear preview if fetching fails
+          setOcrOverlayImageSrc('');
+          showToast('Failed to load existing receipt preview.', 'error');
+        }
+      } else if (isEditMode && !expenseToEdit?.receipt_blob_id) {
+        // If editing an expense that has no receipt
+        setReceiptFile(null);
+        setReceiptImageSrc('');
+        setReceiptMimeType(null);
+        setOcrOverlayImageSrc('');
+        setScannedBlobId(null);
+      }
+    };
+
     if (isEditMode && expenseToEdit) {
       setTitle(expenseToEdit.title);
       setAmount((expenseToEdit.amount / 100).toFixed(2));
@@ -72,12 +121,25 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
       setVatAmount(expenseToEdit.vat_applied ? (expenseToEdit.vat_amount / 100).toFixed(2) : '');
       setExpenseType(expenseToEdit.expense_type || '');
 	    setBook(expenseToEdit.book || false);
-    } else if (expenseTypes.length > 0) {
+      loadExistingReceipt(); // Call the async function
+    } else if (!isEditMode && expenseTypes.length > 0) {
       setExpenseType(expenseTypes[0]);
 	    setBook(false);
       setExpenseDate(getTodayString());
+      // Clear receipt states when adding a new expense
+      setReceiptFile(null);
+      setReceiptImageSrc('');
+      setReceiptMimeType(null);
+      setOcrOverlayImageSrc('');
+      setScannedBlobId(null);
     }
-  }, [isEditMode, expenseToEdit, expenseTypes]);
+    // FIX: Initialize remembered OCR values from the expenseToEdit's data if available
+    // This ensures that when editing, the OCR overlay starts with the expense's current data
+    setRememberedOcrSupplier(expenseToEdit?.supplier || '');
+    setRememberedOcrDate(expenseToEdit?.expense_date ? new Date(expenseToEdit.expense_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, ' ') : ''); // Convert to "DD Mon YYYY" format
+    setRememberedOcrTotal(expenseToEdit?.amount ? (expenseToEdit.amount / 100).toFixed(2) : '');
+
+  }, [isEditMode, expenseToEdit, expenseTypes, token]); // Add token to dependencies
 
   useEffect(() => {
     if (vatApplied && amount) {
@@ -91,7 +153,8 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
     if (files && files[0]) {
       const file = files[0];
       setReceiptFile(file);
-      // Create an object URL for immediate local preview. This works for images and PDFs.
+      setReceiptMimeType(file.type); // Set mimetype from the new file
+      // Create an object URL for immediate local preview in THIS modal.
       setReceiptImageSrc(URL.createObjectURL(file)); 
       
       const formData = new FormData();
@@ -101,7 +164,14 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
         const uploadResponse = await api.post('/blob/upload', formData, {
           headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
         });
-        setScannedBlobId(uploadResponse.data.id); // This is the ID of the uploaded blob (original file)
+        setScannedBlobId(uploadResponse.data.id); // This is the ID of the newly uploaded blob
+        // If a new file is uploaded, clear the OCR overlay image source until scanned
+        setOcrOverlayImageSrc(''); 
+        // FIX: Clear remembered OCR selections when a new file is uploaded
+        setRememberedOcrSupplier('');
+        setRememberedOcrDate('');
+        setRememberedOcrTotal('');
+
       } catch (err) {
         setError('Failed to upload receipt for scanning.');
         showToast('Failed to upload receipt.', 'error');
@@ -110,22 +180,47 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   };
 
   const handleScanReceipt = async () => {
-    if (!scannedBlobId) return;
+    if (!scannedBlobId) {
+      showToast('No receipt attached to scan.', 'info');
+      return;
+    }
     setIsScanning(true);
     setError(null);
     try {
       showToast('Scanning receipt... this might take a moment.', 'info');
       // Call the backend's scan endpoint. It will convert PDF to image internally if necessary,
-      // and return the OCR results and overlay data.
-      const response = await api.post(`/blob/${scannedBlobId}/scan`, {}, {
-        headers: { Authorization: `Bearer ${token}` }
+      // and return the OCR results and overlay data, including the ocrImageBlobId.
+      const response = await api.post(`/blob/${scannedBlobId}/scan`, undefined, { 
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'json' // Ensure response is parsed as JSON
       });
       
-      const { parsedData, overlay } = response.data;
-      setScanResult({ parsedData, overlay }); 
+      // FIX: Ensure ocrImageBlobId is present in the response
+      if (response.data && response.data.parsedData && response.data.overlay && response.data.ocrImageBlobId) {
+        const { parsedData, overlay, ocrImageBlobId } = response.data;
+        
+        // Construct the full URL to fetch the OCR'd image from the backend
+        const constructedOcrImageUrl = `${api.defaults.baseURL}/blob/${ocrImageBlobId}`;
+        console.log("OCR Overlay Image URL being passed:", constructedOcrImageUrl); // Debugging log
 
-      showToast('Scan complete. Please verify the details.', 'success');
-      setOverlayOpen(true);
+        // Set the state for the OcrOverlayModal's image source
+        setOcrOverlayImageSrc(constructedOcrImageUrl);
+        setScanResult({ parsedData, overlay, ocrImageBlobId }); 
+
+        // FIX: When a new scan is performed, update the remembered OCR values with the new parsed data
+        setRememberedOcrSupplier(parsedData.supplier || '');
+        setRememberedOcrDate(parsedData.expense_date || ''); // Keep ISO format from OCR service
+        setRememberedOcrTotal(parsedData.amount ? (parsedData.amount / 100).toFixed(2) : '');
+
+        showToast('Scan complete. Please verify the details.', 'success');
+        setOverlayOpen(true);
+      } else {
+        // Handle cases where the backend response is not as expected
+        const errorMessage = response.data?.message || 'OCR scan returned incomplete data. Please try again or enter manually.';
+        setError(errorMessage);
+        showToast(errorMessage, 'error');
+      }
+
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Failed to scan receipt.';
       setError(errorMessage);
@@ -136,21 +231,51 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   };
 
   const handleOverlayConfirm = (data: { total: string; date: string; supplier: string; }) => {
+    // FIX: Enhance parseDate to handle "DD Mon YYYY" format
     const parseDate = (dateStr: string): string | null => {
         if (!dateStr) return null;
-        const match = dateStr.match(/(\d{1,2}[\s\/\-.]\d{1,2}[\s\/\-.]\d{4})/);
-        if (!match || !match[0]) return null;
-        
-        const cleanedDateStr = match[0].replace(/\s/g, '').replace(/[\-.]/g, '/');
-        const parts = cleanedDateStr.split('/');
-        if (parts.length === 3) {
-            const [day, month, year] = parts;
-            const isoDateStr = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
-            if (!isNaN(new Date(isoDateStr).getTime())) {
-                return isoDateStr;
+
+        // Try YYYY-MM-DD format first (from backend's OCR initial parse)
+        const isoMatch = dateStr.match(/^\d{4}-\d{2}-\d{2}$/);
+        if (isoMatch) {
+            return dateStr;
+        }
+
+        // Try DD Mon YYYY format (e.g., "09 Jul 2025")
+        const monthMap: { [key: string]: string } = {
+            'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06',
+            'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12'
+        };
+        const ddMonYyyyMatch = dateStr.match(/^(\d{1,2})\s([A-Za-z]{3})\s(\d{4})$/);
+        if (ddMonYyyyMatch) {
+            const day = ddMonYyyyMatch[1].padStart(2, '0');
+            const month = monthMap[ddMonYyyyMatch[2]];
+            const year = ddMonYyyyMatch[3];
+            if (day && month && year) {
+                return `${year}-${month}-${day}`; // Convert to ISO for input type="date"
             }
         }
-        return null;
+
+        // Try DD/MM/YYYY or DD.MM.YYYY or DD-MM-YYYY format
+        const ddMmYyyyMatch = dateStr.match(/^(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{4})$/);
+        if (ddMmYyyyMatch) {
+            const day = ddMmYyyyMatch[1].padStart(2, '0');
+            const month = ddMmYyyyMatch[2].padStart(2, '0');
+            const year = ddMmYyyyMatch[3];
+            return `${year}-${month}-${day}`; // Convert to ISO for input type="date"
+        }
+
+        // Fallback: try to parse as a generic date and convert to ISO
+        try {
+            const dateObj = new Date(dateStr);
+            if (!isNaN(dateObj.getTime())) {
+                return dateObj.toISOString().split('T')[0];
+            }
+        } catch (e) {
+            // Ignore parsing errors
+        }
+
+        return null; // If no format matches
     };
 
     const parseCurrency = (currencyStr: string): string => {
@@ -159,6 +284,8 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
         return match ? match[0].replace(/[\s,]/g, '') : '';
     };
 
+    // FIX: Update AddExpenseModal's state with confirmed OCR values
+    // These are the actual form fields, so they should reflect user selections
     setSupplier(data.supplier);
     setTitle(data.supplier); // Often the title can be the supplier name
     
@@ -170,6 +297,11 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
     }
 
     setAmount(parseCurrency(data.total));
+
+    // FIX: Store these confirmed values in new state variables (raw strings)
+    setRememberedOcrSupplier(data.supplier);
+    setRememberedOcrDate(data.date); 
+    setRememberedOcrTotal(data.total); 
     
     // The OCR.space parsedData might also include VAT, but the current `onConfirm` signature
     // only passes total, date, and supplier. If VAT is needed, it would need to be added here.
@@ -226,12 +358,20 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   return (
     <>
       <div className="fixed inset-0 z-40 flex items-center justify-center bg-black bg-opacity-50">
-        <div className="flex w-full max-w-7xl p-6 space-x-6 bg-white rounded-lg shadow-xl" style={{height: '90vh'}}>
-          
+        <div className="relative w-full max-w-7xl p-6 space-x-6 bg-white rounded-lg shadow-xl" style={{height: '90vh'}}>
+          {/* FIX: Move close button to top right of the modal content */}
+          <button
+            onClick={onClose}
+            className="absolute top-4 right-4 p-1 text-gray-400 rounded-full hover:bg-gray-100 z-10"
+            aria-label="Close modal"
+          >
+            <X className="w-6 h-6" />
+          </button>
+
           <div className="flex flex-col w-1/3">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold text-gray-900">{isEditMode ? 'Edit Expense' : 'Add New Expense'}</h2>
-              <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100"><X /></button>
+              {/* The close button is now outside this div */}
             </div>
             <form onSubmit={handleSubmit} className="flex flex-col flex-grow mt-4 space-y-4 overflow-y-auto pr-2">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -255,24 +395,25 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
                 </div>
               </div>
               
-              {!isEditMode && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Attach Receipt</label>
-                  <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`flex items-center justify-center w-full px-6 pt-5 pb-6 mt-1 border-2 border-dashed rounded-md transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-gray-300'}`}>
-                    <div className="space-y-1 text-center">
-                      <UploadCloud className="w-12 h-12 mx-auto text-gray-400" />
-                      <div className="flex text-sm text-gray-600">
-                        <label htmlFor="file-upload" className="relative font-medium rounded-md cursor-pointer text-primary hover:text-primary-hover">
-                          <span>Upload a file</span>
-                          <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={(e) => handleFileChange(e.target.files)} />
-                        </label>
-                        <p className="pl-1">or drag and drop</p>
-                      </div>
-                      {receiptFile ? <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>{receiptFile.name}</p> : <p className="text-xs text-gray-500">PDF, PNG, JPG up to 10MB</p>}
+              {/* FIX: Always show the receipt upload/preview section */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Attach Receipt</label>
+                <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`flex items-center justify-center w-full px-6 pt-5 pb-6 mt-1 border-2 border-dashed rounded-md transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-gray-300'}`}>
+                  <div className="space-y-1 text-center">
+                    <UploadCloud className="w-12 h-12 mx-auto text-gray-400" />
+                    <div className="flex text-sm text-gray-600">
+                      <label htmlFor="file-upload" className="relative font-medium rounded-md cursor-pointer text-primary hover:text-primary-hover">
+                        <span>Upload a file</span>
+                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={(e) => handleFileChange(e.target.files)} />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
                     </div>
+                    {/* Display current receipt file name if a new one is selected, otherwise show existing */}
+                    {receiptFile ? <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>{receiptFile.name}</p> : 
+                     (expenseToEdit?.receipt_blob_id && <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>Existing Receipt</p>)}
                   </div>
                 </div>
-              )}
+              </div>
               
                <div>
                 <label htmlFor="expenseType" className="block text-sm font-medium text-gray-700">Expense Type</label>
@@ -313,17 +454,25 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
           <div className="flex flex-col w-2/3 pl-6 border-l">
             <h3 className="text-lg font-semibold text-gray-800">Receipt Preview</h3>
             <div className="relative flex-grow mt-2 bg-gray-100 rounded-lg">
-              {receiptFile && receiptImageSrc ? (
-                // Always display as an image, as the OCR overlay expects an image.
-                // If the original file was a PDF, receiptImageSrc will be a blob URL of the PDF.
-                // The OCR overlay will work on the image data returned by the backend's scan endpoint.
-                <img src={receiptImageSrc} alt="Receipt Preview" className="absolute top-0 left-0 object-contain w-full h-full rounded-md"/>
+              {/* Display preview based on receiptImageSrc and receiptMimeType */}
+              {(receiptImageSrc && receiptMimeType) ? (
+                receiptMimeType.startsWith('image/') ? (
+                  <img src={receiptImageSrc} alt="Receipt Preview" className="absolute top-0 left-0 object-contain w-full h-full rounded-md"/>
+                ) : receiptMimeType === 'application/pdf' ? (
+                  <embed src={receiptImageSrc} type="application/pdf" className="w-full h-full rounded-md"/>
+                ) : (
+                  <div className="flex items-center justify-center w-full h-full text-center text-gray-600">
+                    <p>Unsupported file type for preview: {receiptMimeType}.</p>
+                  </div>
+                )
               ) : (
                 <div className="flex items-center justify-center w-full h-full text-gray-500">
                   <FileText className="w-16 h-16"/>
+                  <p className="ml-2">No receipt attached.</p>
                 </div>
               )}
             </div>
+            {/* Only show scan button if a blob ID is available */}
             {scannedBlobId && (
               <button type="button" onClick={handleScanReceipt} disabled={isScanning} className="w-full mt-4 inline-flex items-center justify-center px-4 py-2 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-green-600 hover:bg-green-700 disabled:bg-gray-400">
                 <ScanLine className="w-5 h-5 mr-2 -ml-1" />
@@ -340,16 +489,12 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
           onClose={() => setOverlayOpen(false)}
           onConfirm={handleOverlayConfirm}
           scanResult={scanResult}
-          // The imageSrc passed to OcrOverlayModal MUST be an image URL.
-          // If the original file was a PDF, receiptImageSrc will be a blob URL of the PDF.
-          // For the OCR overlay to correctly align, it needs the *rendered image* of the PDF.
-          // A more robust solution would be for the backend's `/blob/:id/scan` endpoint
-          // to return the URL of the *converted image* if the input was a PDF, and you'd use that here.
-          // For simplicity with the current setup, we're relying on `receiptImageSrc`
-          // which is a blob URL of the *original* file. If it's a PDF, the `OcrOverlayModal`
-          // will display it as an image, which might not be ideal, but the OCR overlay
-          // will still align based on the OCR.space-processed image.
-          imageSrc={receiptImageSrc} 
+          // Pass the ocrOverlayImageSrc state to the OcrOverlayModal
+          imageSrc={ocrOverlayImageSrc} 
+          // FIX: Pass last confirmed OCR values to OcrOverlayModal
+          initialSupplier={rememberedOcrSupplier}
+          initialDate={rememberedOcrDate}
+          initialTotal={rememberedOcrTotal}
         />
       )}
     </>

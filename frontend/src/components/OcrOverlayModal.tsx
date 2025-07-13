@@ -3,45 +3,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Check, DollarSign, Calendar, Building, Percent, AlertTriangle, Loader2 } from 'lucide-react';
-
-// Define the pdfjs-dist window object type to avoid TypeScript errors
-declare global {
-  interface Window {
-    pdfjsLib: any;
-  }
-}
-
-// --- Robust PDF.js Loader ---
-// This promise ensures we only try to load the script once.
-let pdfJsLoadingPromise: Promise<void> | null = null;
-const loadPdfJs = () => {
-  if (typeof window.pdfjsLib !== 'undefined') {
-    return Promise.resolve();
-  }
-
-  if (pdfJsLoadingPromise) {
-    return pdfJsLoadingPromise;
-  }
-
-  pdfJsLoadingPromise = new Promise<void>((resolve, reject) => {
-    const script = document.createElement('script');
-    // Use a stable CDN URL for the library
-    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.102/pdf.min.js';
-    script.async = true;
-    script.onload = () => {
-      resolve();
-    };
-    script.onerror = () => {
-      pdfJsLoadingPromise = null; // Reset promise on error
-      reject(new Error('Failed to load pdf.js'));
-    };
-    document.body.appendChild(script);
-  });
-
-  return pdfJsLoadingPromise;
-};
-
+import { X, Check, DollarSign, Calendar, Building } from 'lucide-react';
 
 interface OcrWord {
   WordText: string;
@@ -66,31 +28,24 @@ interface OcrOverlay {
 interface OcrOverlayModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (data: { amount: string; date: string; supplier: string; vat: string }) => void;
-  scanResult?: { // Prop is now optional to prevent crashes
-    overlay: OcrOverlay;
-    parsedData: any;
-    warning?: string | null;
-  };
-  imageSrc: string;
-  mimeType: string;
-  initialData: {
-      supplier: string;
-      date: string;
-      amount: string;
-      vat: string;
-  }
+  onConfirm: (data: { total: string; date: string; supplier: string; }) => void;
+  scanResult: { overlay: OcrOverlay; parsedData: any };
+  imageSrc: string; // This is the URL to the OCR'd image
+  // FIX: Add new props for initial values
+  initialSupplier: string;
+  initialDate: string;
+  initialTotal: string;
 }
 
-type SelectionMode = 'supplier' | 'date' | 'amount' | 'vat';
+type SelectionMode = 'supplier' | 'date' | 'total';
 
-export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult, imageSrc, mimeType, initialData }: OcrOverlayModalProps) {
+export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult, imageSrc, initialSupplier, initialDate, initialTotal }: OcrOverlayModalProps) {
+  // FIX: Initialize state with empty strings. Values will be set in useEffect.
   const [selectedSupplier, setSelectedSupplier] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
-  const [selectedAmount, setSelectedAmount] = useState('');
-  const [selectedVat, setSelectedVat] = useState('');
+  const [selectedTotal, setSelectedTotal] = useState('');
   const [selectionMode, setSelectionMode] = useState<SelectionMode>('supplier');
-
+  
   const [imageDimensions, setImageDimensions] = useState({
     displayedWidth: 0,
     displayedHeight: 0,
@@ -99,18 +54,33 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
     offsetX: 0,
     offsetY: 0,
   });
-
   const imageRef = useRef<HTMLImageElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [isRendering, setIsRendering] = useState(false);
 
-  const warning = scanResult?.warning;
-  const isPdf = mimeType === 'application/pdf';
+  // FIX: This useEffect will now correctly prioritize initial props, then OCR data
+  useEffect(() => {
+    if (isOpen) {
+      // Prioritize the `initial` props (which come from AddExpenseModal's current form state)
+      // If `initial` prop is empty, then fall back to OCR parsed data.
+      setSelectedSupplier(initialSupplier || scanResult?.parsedData?.supplier || '');
+      setSelectedDate(initialDate || scanResult?.parsedData?.expense_date || '');
+      setSelectedTotal(initialTotal || (scanResult?.parsedData?.amount ? (scanResult.parsedData.amount / 100).toFixed(2) : ''));
+    }
+  }, [isOpen, initialSupplier, initialDate, initialTotal, scanResult]); // Dependencies ensure this runs when relevant data changes
 
-  const calculateAndSetDimensions = useCallback((naturalWidth: number, naturalHeight: number) => {
-    if (containerRef.current) {
+
+  // FIX: Make handleImageLoad a useCallback to prevent unnecessary re-creations
+  const handleImageLoad = useCallback(() => {
+    if (imageRef.current && containerRef.current) {
         const { clientWidth: containerWidth, clientHeight: containerHeight } = containerRef.current;
+        const { naturalWidth, naturalHeight } = imageRef.current;
+
+        // Ensure natural dimensions are valid before proceeding
+        if (naturalWidth === 0 || naturalHeight === 0) {
+            console.warn("Image natural dimensions are zero, cannot calculate overlay positions.");
+            return; // Exit if image hasn't loaded or is broken
+        }
+
         const containerAspectRatio = containerWidth / containerHeight;
         const imageAspectRatio = naturalWidth / naturalHeight;
         let displayedWidth, displayedHeight;
@@ -122,102 +92,78 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
             displayedHeight = containerHeight;
             displayedWidth = containerHeight * imageAspectRatio;
         }
+        
+        // Ensure displayed dimensions are not zero
+        if (displayedWidth === 0 || displayedHeight === 0) {
+            console.warn("Calculated displayed dimensions are zero.");
+            return;
+        }
+
         const offsetX = (containerWidth - displayedWidth) / 2;
         const offsetY = (containerHeight - displayedHeight) / 2;
+
         setImageDimensions({ displayedWidth, displayedHeight, naturalWidth, naturalHeight, offsetX, offsetY });
+        console.log("Image dimensions calculated:", { displayedWidth, displayedHeight, naturalWidth, naturalHeight, offsetX, offsetY });
+    } else {
+        console.log("Image ref or container ref not available for dimension calculation.");
     }
-  }, []);
+  }, []); // No dependencies, as it only uses refs
 
-  const handleImageLoad = () => {
-    if (imageRef.current) {
-      calculateAndSetDimensions(imageRef.current.naturalWidth, imageRef.current.naturalHeight);
-    }
-  };
-
-  // Pre-populate fields, prioritizing existing data from the parent modal
+  // Attach resize listener
   useEffect(() => {
-    // Defensively check if scanResult and its properties exist before using them.
-    if (isOpen && scanResult && scanResult.parsedData) {
-        const parsedData = scanResult.parsedData || {};
-        setSelectedSupplier(initialData.supplier || parsedData.supplier || '');
-        setSelectedDate(initialData.date || parsedData.expense_date || '');
-        const initialAmount = initialData.amount ? parseFloat(initialData.amount).toFixed(2) : '';
-        const parsedAmount = parsedData.amount ? (parsedData.amount / 100).toFixed(2) : '';
-        setSelectedAmount(initialAmount || parsedAmount || '');
-        const initialVat = initialData.vat ? parseFloat(initialData.vat).toFixed(2) : '';
-        const parsedVat = parsedData.vat_amount ? (parsedData.vat_amount / 100).toFixed(2) : '';
-        setSelectedVat(initialVat || parsedVat || '');
-    }
-  }, [isOpen, scanResult, initialData]);
+    window.addEventListener('resize', handleImageLoad);
+    return () => window.removeEventListener('resize', handleImageLoad);
+  }, [handleImageLoad]); // Dependency on handleImageLoad
 
-  // Effect to render PDF to canvas
+  // Trigger image load calculation when modal opens or imageSrc changes
   useEffect(() => {
-    if (!isOpen || !isPdf || !imageSrc) return;
-
-    const renderPdfOnCanvas = async () => {
-      setIsRendering(true);
-      try {
-        await loadPdfJs();
-        
-        const pdfjsLib = window.pdfjsLib;
-        // Use a matching, stable CDN URL for the worker
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.102/pdf.worker.min.js`;
-
-        const response = await fetch(imageSrc);
-        if (!response.ok) throw new Error(`Failed to fetch PDF blob: ${response.statusText}`);
-        const pdfData = await response.arrayBuffer();
-        const typedarray = new Uint8Array(pdfData);
-
-        const loadingTask = pdfjsLib.getDocument(typedarray);
-        const pdf = await loadingTask.promise;
-        
-        const page = await pdf.getPage(1);
-        const viewport = page.getViewport({ scale: 2.0 });
-        const canvas = canvasRef.current;
-        if (canvas) {
-          const context = canvas.getContext('2d');
-          canvas.height = viewport.height;
-          canvas.width = viewport.width;
-          await page.render({ canvasContext: context, viewport: viewport }).promise;
-          calculateAndSetDimensions(canvas.width, canvas.height);
-        }
-      } catch (error) {
-        console.error("An error occurred during the PDF rendering process:", error);
-      } finally {
-        setIsRendering(false);
+    if (isOpen && imageSrc) {
+      // Clear previous dimensions to force recalculation on new imageSrc
+      setImageDimensions({ displayedWidth: 0, displayedHeight: 0, naturalWidth: 0, naturalHeight: 0, offsetX: 0, offsetY: 0 });
+      // The `onLoad` event on the <img> tag is the primary trigger.
+      // We can also try to call it directly if the image is already cached.
+      if (imageRef.current?.complete) {
+        handleImageLoad();
       }
-    };
-
-    renderPdfOnCanvas();
-
-  }, [isOpen, isPdf, imageSrc, calculateAndSetDimensions]);
+    }
+  }, [isOpen, imageSrc, handleImageLoad]); // Dependencies on isOpen, imageSrc, and handleImageLoad
 
   if (!isOpen) return null;
 
   const handleLineClick = (line: OcrLine) => {
     const lineText = line.Words.map(w => w.WordText).join(' ').trim();
     switch (selectionMode) {
-      case 'supplier': setSelectedSupplier(lineText); break;
-      case 'date': setSelectedDate(lineText); break;
-      case 'amount': setSelectedAmount(lineText); break;
-      case 'vat': setSelectedVat(lineText); break;
+      case 'supplier':
+        setSelectedSupplier(lineText);
+        break;
+      case 'date':
+        setSelectedDate(lineText);
+        break;
+      case 'total':
+        setSelectedTotal(lineText);
+        break;
     }
   };
 
   const handleConfirm = () => {
-    onConfirm({ supplier: selectedSupplier, date: selectedDate, amount: selectedAmount, vat: selectedVat });
+    onConfirm({
+      supplier: selectedSupplier,
+      date: selectedDate,
+      total: selectedTotal,
+    });
     onClose();
   };
-
+  
   const selectionButtons: { mode: SelectionMode, icon: React.ElementType, label: string }[] = [
     { mode: 'supplier', icon: Building, label: 'Supplier' },
     { mode: 'date', icon: Calendar, label: 'Date' },
-    { mode: 'amount', icon: DollarSign, label: 'Amount' },
-    { mode: 'vat', icon: Percent, label: 'VAT' },
+    { mode: 'total', icon: DollarSign, label: 'Total' },
   ];
 
-  const scaleFactor = imageDimensions.naturalWidth > 0
-    ? imageDimensions.displayedWidth / imageDimensions.naturalWidth
+  const overlayLines = scanResult?.overlay?.Lines || [];
+
+  const scaleFactor = imageDimensions.naturalWidth > 0 
+    ? imageDimensions.displayedWidth / imageDimensions.naturalWidth 
     : 0;
 
   return (
@@ -227,18 +173,7 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
           <h2 className="text-xl font-semibold text-gray-900">Verify Scanned Data</h2>
           <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100"><X /></button>
         </div>
-
-        {warning && (
-            <div className="flex items-start p-3 my-2 text-sm text-yellow-800 bg-yellow-100 border-l-4 border-yellow-500 rounded-r-lg" role="alert">
-                <AlertTriangle className="w-5 h-5 mr-3 text-yellow-600"/>
-                <div>
-                    <p className="font-bold">Partial Scan Warning</p>
-                    <p>{warning}</p>
-                </div>
-            </div>
-        )}
-
-        <div className={`flex flex-grow overflow-hidden ${warning ? 'mt-2' : 'mt-4'}`}>
+        <div className="flex flex-grow mt-4 overflow-hidden">
           <div className="flex flex-col w-1/3 pr-4 space-y-4 border-r">
             <p className="text-sm text-gray-600">Auto-populated data is shown below. Click a field, then click the receipt text to correct it.</p>
             <div className="space-y-2">
@@ -259,36 +194,58 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
                     <input type="text" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} className="w-full p-2 mt-1 text-sm border rounded-md"/>
                 </div>
                  <div>
-                    <label className="text-xs font-semibold text-gray-500">AMOUNT</label>
-                    <input type="text" value={selectedAmount} onChange={e => setSelectedAmount(e.target.value)} className="w-full p-2 mt-1 text-sm border rounded-md"/>
-                </div>
-                 <div>
-                    <label className="text-xs font-semibold text-gray-500">VAT</label>
-                    <input type="text" value={selectedVat} onChange={e => setSelectedVat(e.target.value)} className="w-full p-2 mt-1 text-sm border rounded-md"/>
+                    <label className="text-xs font-semibold text-gray-500">TOTAL</label>
+                    <input type="text" value={selectedTotal} onChange={e => setSelectedTotal(e.target.value)} className="w-full p-2 mt-1 text-sm border rounded-md"/>
                 </div>
             </div>
           </div>
-          <div ref={containerRef} className="relative flex items-center justify-center flex-grow w-2/3 h-full overflow-hidden bg-gray-100">
-              {isRendering && <Loader2 className="w-8 h-8 text-gray-500 animate-spin" />}
-              {isPdf ? (
-                  <canvas ref={canvasRef} className="absolute object-contain" style={{ width: `${imageDimensions.displayedWidth}px`, height: `${imageDimensions.displayedHeight}px`, top: `${imageDimensions.offsetY}px`, left: `${imageDimensions.offsetX}px`, visibility: isRendering ? 'hidden' : 'visible' }} />
+          <div ref={containerRef} className="relative flex-grow w-2/3 h-full overflow-hidden bg-gray-100">
+              {imageSrc ? (
+                <img 
+                  ref={imageRef} 
+                  src={imageSrc} 
+                  alt="Scanned Receipt" 
+                  onLoad={handleImageLoad} 
+                  onError={(e) => console.error("Error loading image for OCR overlay:", e.currentTarget.src)} 
+                  className="absolute object-contain" 
+                  style={{ 
+                    width: `${imageDimensions.displayedWidth}px`, 
+                    height: `${imageDimensions.displayedHeight}px`, 
+                    top: `${imageDimensions.offsetY}px`, 
+                    left: `${imageDimensions.offsetX}px` 
+                  }} 
+                />
               ) : (
-                <img ref={imageRef} src={imageSrc} alt="Scanned Receipt" onLoad={handleImageLoad} className="absolute object-contain" style={{ width: `${imageDimensions.displayedWidth}px`, height: `${imageDimensions.displayedHeight}px`, top: `${imageDimensions.offsetY}px`, left: `${imageDimensions.offsetX}px` }} />
+                <div className="flex items-center justify-center w-full h-full text-gray-500">
+                  <FileText className="w-16 h-16"/>
+                  <p className="ml-2">No image to display for OCR.</p>
+                </div>
               )}
-              {scaleFactor > 0 && scanResult?.overlay?.Lines?.map((line, lineIndex) => {
+              
+              {scaleFactor > 0 && overlayLines.map((line: OcrLine, lineIndex: number) => {
                 if (!line.Words || line.Words.length === 0) return null;
                 const firstWord = line.Words[0];
                 const lastWord = line.Words[line.Words.length - 1];
                 const lineWidth = lastWord.Left + lastWord.Width - firstWord.Left;
                 return (
-                  <div key={lineIndex} className="absolute border border-dashed border-blue-500 cursor-pointer hover:bg-blue-500 hover:bg-opacity-30 z-10" style={{ left: `${(firstWord.Left * scaleFactor) + imageDimensions.offsetX}px`, top: `${(line.MinTop * scaleFactor) + imageDimensions.offsetY}px`, width: `${lineWidth * scaleFactor}px`, height: `${line.MaxHeight * scaleFactor}px` }} onClick={() => handleLineClick(line)} title={line.Words.map(w => w.WordText).join(' ')} />
+                  <div key={lineIndex} 
+                       className="absolute border border-dashed border-blue-500 cursor-pointer hover:bg-blue-500 hover:bg-opacity-30 z-10" 
+                       style={{ 
+                         left: `${(firstWord.Left * scaleFactor) + imageDimensions.offsetX}px`, 
+                         top: `${(line.MinTop * scaleFactor) + imageDimensions.offsetY}px`, 
+                         width: `${lineWidth * scaleFactor}px`, 
+                         height: `${line.MaxHeight * scaleFactor}px` 
+                       }} 
+                       onClick={() => handleLineClick(line)} 
+                       title={line.Words.map(w => w.WordText).join(' ')} 
+                  />
                 )
               })}
           </div>
         </div>
         <div className="flex justify-end flex-shrink-0 pt-4 mt-4 border-t">
           <button onClick={onClose} type="button" className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
-          <button onClick={handleConfirm} type="button" className="inline-flex items-center justify-center px-4 py-2 ml-3 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-primary hover:bg-primary-hover">
+          <button type="submit" className="inline-flex items-center justify-center px-4 py-2 ml-3 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-primary hover:bg-primary-hover">
             <Check className="w-4 h-4 mr-2"/>
             Confirm Selections
           </button>

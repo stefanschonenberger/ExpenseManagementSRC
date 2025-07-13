@@ -15,5 +15,5 @@ export class Blob {
 
   // 'bytea' is the PostgreSQL type for storing binary data.
   @Column({ type: 'bytea' })
-  data: Buffer;
+  data: Buffer; // Ensure this is correctly configured to store binary data
 }
