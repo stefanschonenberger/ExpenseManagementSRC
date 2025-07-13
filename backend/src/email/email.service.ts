@@ -1,3 +1,4 @@
+// backend/src/email/email.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -38,14 +39,13 @@ export class EmailService {
       );
       const newAccessToken = response.data.access_token;
       
-      // Add an explicit check for the type and value of the new token
       if (typeof newAccessToken !== 'string' || !newAccessToken) {
         throw new Error('Received invalid or empty access token from Microsoft Graph.');
       }
 
       this.accessToken = newAccessToken;
       this.tokenExpiryTime = Date.now() + (response.data.expires_in - 60) * 1000;
-      return this.accessToken; // The compiler now knows this.accessToken must be a string here.
+      return this.accessToken;
     } catch (error) {
       this.logger.error('Failed to get Graph API access token.', error.response?.data || error.message);
       throw new Error('Could not authenticate with Microsoft Graph.');
@@ -101,8 +101,9 @@ export class EmailService {
   }
 
   async sendApprovalEmailWithPdf(report: ExpenseReport, employee: User, financeEmail: string | null, pdfBuffer: Buffer) {
+    const approverName = report.approver ? report.approver.full_name : 'a manager';
     const subject = `Expense Report Approved: ${report.title}`;
-    const html = `<p>Hello,</p><p>The expense report "<b>${report.title}</b>" submitted by ${employee.full_name} has been approved by ${report.approver.full_name}.</p><p>The PDF summary is attached for your records.</p><p>Payment will be processed by the finance department.</p>`;
+    const html = `<p>Hello,</p><p>The expense report "<b>${report.title}</b>" submitted by ${employee.full_name} has been approved by ${approverName}.</p><p>The PDF summary is attached for your records.</p><p>Payment will be processed by the finance department.</p>`;
     
     const recipients = [employee.email];
     if (financeEmail) {
@@ -116,9 +117,9 @@ export class EmailService {
     });
   }
 
-  async sendRejectionNotification(report: ExpenseReport, employee: User) {
+  async sendRejectionNotification(report: ExpenseReport, employee: User, manager: User) {
     const subject = `Expense Report Action Required: ${report.title}`;
-    const html = `<p>Hello ${employee.full_name},</p><p>Your expense report titled "<b>${report.title}</b>" was returned by ${report.approver.full_name}.</p><p><b>Reason:</b> ${report.rejection_reason}</p><p>Please log in to the ExpenseBeast system to make the necessary changes and resubmit.</p>`;
+    const html = `<p>Hello ${employee.full_name},</p><p>Your expense report titled "<b>${report.title}</b>" was returned by ${manager.full_name}.</p><p><b>Reason:</b> ${report.rejection_reason}</p><p>Please log in to the ExpenseBeast system to make the necessary changes and resubmit.</p>`;
     await this.sendMail([employee.email], subject, html);
   }
 }

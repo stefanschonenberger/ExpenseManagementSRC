@@ -9,6 +9,9 @@ import { exec, execFile } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
 
 @Injectable()
 export class OcrService {
@@ -19,10 +22,49 @@ export class OcrService {
     private readonly httpService: HttpService,
   ) {}
 
-  private async convertPdfPageToPng(pdfBuffer: Buffer): Promise<Buffer> {
+  /**
+   * Counts the number of pages in a PDF buffer using Ghostscript.
+   * @param pdfBuffer The buffer containing the PDF file data.
+   * @returns A promise that resolves to the number of pages.
+   */
+  public async getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
     const tempDir = os.tmpdir();
-    const inputPdfPath = path.join(tempDir, `input_${Date.now()}.pdf`);
-    const outputPngPath = path.join(tempDir, `output_${Date.now()}.png`);
+    const inputPdfPath = path.join(tempDir, `info_${Date.now()}.pdf`);
+    try {
+      await fs.writeFile(inputPdfPath, pdfBuffer);
+      // NOTE: Ensure Ghostscript is installed and in the system's PATH.
+      // 'gswin64c.exe' is for Windows. Use 'gs' on Linux/macOS.
+      const gsExecutable = 'gswin64c.exe';
+      const gsArgs = [
+        '-q',
+        '-dNODISPLAY',
+        '-c',
+        `(${inputPdfPath.replace(/\\/g, '/')}) (r) file runpdfbegin pdfpagecount = quit`,
+      ];
+      
+      this.logger.log(`Executing Ghostscript to get page count: ${gsExecutable} ${gsArgs.join(' ')}`);
+      const { stdout } = await execFileAsync(gsExecutable, gsArgs);
+      const pageCount = parseInt(stdout.trim(), 10);
+      return isNaN(pageCount) ? 0 : pageCount;
+    } catch (error) {
+      this.logger.error(`Failed to get PDF page count: ${error.message}`, error.stack);
+      return 0; // Return 0 if counting fails
+    } finally {
+      // Clean up the temporary file.
+      await fs.unlink(inputPdfPath).catch(err => this.logger.warn(`Failed to delete temp info file: ${err.message}`));
+    }
+  }
+
+  /**
+   * Converts a specific page of a PDF buffer to a PNG image buffer.
+   * @param pdfBuffer The buffer containing the PDF file data.
+   * @param pageNumber The 1-based index of the page to convert.
+   * @returns A promise that resolves to a buffer containing the PNG image data.
+   */
+  public async convertPdfPageToPng(pdfBuffer: Buffer, pageNumber: number): Promise<Buffer> {
+    const tempDir = os.tmpdir();
+    const inputPdfPath = path.join(tempDir, `input_${Date.now()}_p${pageNumber}.pdf`);
+    const outputPngPath = path.join(tempDir, `output_${Date.now()}_p${pageNumber}.png`);
 
     try {
       await fs.writeFile(inputPdfPath, pdfBuffer);
@@ -31,78 +73,60 @@ export class OcrService {
       const gsExecutable = 'gswin64c.exe'; 
       const gsArgs = [
         '-sDEVICE=png16m',
-        '-r300',
+        '-r300', // High resolution for better OCR quality
         '-dQUIET',
         '-dBATCH',
         '-dNOPAUSE',
-        '-dFirstPage=1',
-        '-dLastPage=1',
-        `-sOutputFile=${outputPngPath}`, // Output to a file
+        `-dFirstPage=${pageNumber}`,
+        `-dLastPage=${pageNumber}`,
+        `-sOutputFile=${outputPngPath}`,
         inputPdfPath,
       ];
 
       this.logger.log(`Executing Ghostscript: ${gsExecutable} ${gsArgs.join(' ')}`);
 
-      await new Promise<void>((resolve, reject) => {
-        const child = execFile(gsExecutable, gsArgs, (error, stdout, stderr) => {
-          if (error) {
-            this.logger.error(`Ghostscript error: ${error.message}`);
-            this.logger.error(`Ghostscript stderr: ${stderr}`);
-            return reject(new Error(`PDF conversion failed: ${stderr || error.message}`));
-          }
-          if (stderr) {
-            this.logger.warn(`Ghostscript warnings: ${stderr}`);
-          }
-          resolve();
-        });
-      });
+      await execFileAsync(gsExecutable, gsArgs);
 
-      const imageBuffer = await fs.readFile(outputPngPath); // Read the output file
+      const imageBuffer = await fs.readFile(outputPngPath);
       this.logger.debug(`Generated PNG read from: ${outputPngPath}`);
       return imageBuffer;
 
     } catch (error) {
-      this.logger.error(`Error during PDF to PNG conversion: ${error.message}`, error.stack);
-      throw new Error(`Failed to convert PDF to image: ${error.message}`);
+      this.logger.error(`Error during PDF to PNG conversion for page ${pageNumber}: ${error.message}`, error.stack);
+      throw new Error(`Failed to convert page ${pageNumber} of PDF to image: ${error.message}`);
     } finally {
-      try {
-        await fs.unlink(inputPdfPath);
-        this.logger.debug(`Deleted temporary PDF: ${inputPdfPath}`);
-      } catch (err) {
-        this.logger.warn(`Failed to delete temporary PDF ${inputPdfPath}: ${err.message}`);
-      }
-      try {
-        // Only try to delete if the file was actually created
-        const exists = await fs.access(outputPngPath).then(() => true).catch(() => false);
-        if (exists) {
-            await fs.unlink(outputPngPath);
-            this.logger.debug(`Deleted temporary PNG: ${outputPngPath}`);
-        }
-      } catch (err) {
-        this.logger.warn(`Failed to delete temporary PNG ${outputPngPath}: ${err.message}`);
-      }
+        // Clean up temporary files.
+        await fs.unlink(inputPdfPath).catch(err => this.logger.warn(`Failed to delete temp input file: ${err.message}`));
+        await fs.unlink(outputPngPath).catch(err => this.logger.warn(`Failed to delete temp output file: ${err.message}`));
     }
   }
 
-  // FIX: Modify scanReceipt to return the OCR'd image buffer and its mimetype
+  /**
+   * Scans a receipt file (image or PDF) using OCR.space API.
+   * If the file is a PDF, it converts the first page to an image before scanning.
+   * @param fileBuffer The buffer of the file to scan.
+   * @param mimetype The mimetype of the file.
+   * @param filename The original filename.
+   * @returns An object containing the parsed data, raw text, overlay info, and the image buffer used for OCR.
+   */
   async scanReceipt(fileBuffer: Buffer, mimetype: string, filename: string): Promise<any> {
     let imageBufferForOcr = fileBuffer;
     let imageMimeTypeForOcr = mimetype;
     let originalFilenameForOcr = filename;
 
-    // If it's a PDF, convert to image first for OCR
+    // If it's a PDF, convert the first page to an image for OCR scanning.
     if (mimetype === 'application/pdf') {
       try {
         this.logger.log('Converting PDF to image for OCR...');
-        imageBufferForOcr = await this.convertPdfPageToPng(fileBuffer); // This should be the converted PNG buffer
-        imageMimeTypeForOcr = 'image/png'; // Set mimetype to PNG
+        imageBufferForOcr = await this.convertPdfPageToPng(fileBuffer, 1); 
+        imageMimeTypeForOcr = 'image/png';
         originalFilenameForOcr = filename.replace(/\.pdf$/i, '.png'); 
       } catch (pdfError) {
         this.logger.error(`Failed to convert PDF for OCR: ${pdfError.message}`);
         throw new BadRequestException('Failed to convert PDF for OCR.');
       }
     }
-
+    
     const ocrApiKey = this.configService.get<string>('OCR_SPACE_API_KEY');
     const ocrApiUrl = 'https://api.ocr.space/parse/image';
 
@@ -116,8 +140,8 @@ export class OcrService {
     formData.append('file', imageBufferForOcr, { filename: originalFilenameForOcr, contentType: imageMimeTypeForOcr }); 
     formData.append('OCREngine', '2');
     formData.append('detectOrientation', 'true');
-    formData.append('isOverlayRequired', 'true'); // Ensure overlay is requested
-    formData.append('scale', 'true'); // Ensure scaling is enabled
+    formData.append('isOverlayRequired', 'true');
+    formData.append('scale', 'true');
 
     try {
       this.logger.log('Sending document to OCR.space for processing...');
@@ -139,9 +163,8 @@ export class OcrService {
           parsedData,
           rawText: parsedResult?.ParsedText,
           overlay: parsedResult?.TextOverlay,
-          // FIX: Return the image buffer and its mimetype used for OCR
-          ocrImageBuffer: imageBufferForOcr, // This should be the actual image buffer
-          ocrImageMimeType: imageMimeTypeForOcr // This should be 'image/png' or 'image/jpeg'
+          ocrImageBuffer: imageBufferForOcr,
+          ocrImageMimeType: imageMimeTypeForOcr
         };
 
       } else {
@@ -154,7 +177,12 @@ export class OcrService {
       throw new BadRequestException(specificMessage);
     }
   }
-
+  
+  /**
+   * Parses the raw text from OCR.space to extract structured data like total, VAT, date, and supplier.
+   * @param text The raw text string from the OCR response.
+   * @returns An object with the parsed expense data.
+   */
   private parseOcrSpaceResponse(text: string): any {
     this.logger.debug('Parsing OCR.space text...');
     if (!text) {

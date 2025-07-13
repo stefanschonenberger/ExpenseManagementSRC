@@ -7,6 +7,7 @@ import AddExpenseModal from '@/components/AddExpenseModal';
 import { useAuthStore } from '@/lib/store';
 import Tabs from '@/components/ui/Tabs';
 import ExpenseTable from '@/components/ExpenseTable';
+import { useToastStore } from '@/lib/toastStore';
 
 // The full interface for an expense object
 interface Expense {
@@ -21,7 +22,7 @@ interface Expense {
   supplier: string | null;
   vat_applied: boolean;
   expense_type: string;
-  book: boolean; // Add the 'book' property here
+  book: boolean;
 }
 
 export default function ExpensesPage() {
@@ -34,6 +35,7 @@ export default function ExpensesPage() {
   const [activeTab, setActiveTab] = useState('Drafts');
   
   const token = useAuthStore((state) => state.token);
+  const showToast = useToastStore((state) => state.showToast);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -47,10 +49,11 @@ export default function ExpensesPage() {
         setExpenseTypes(settingsRes.data.expenseTypes);
     } catch (err) {
         setError('Failed to fetch data.');
+        showToast('Failed to load expense data.', 'error');
     } finally {
         setLoading(false);
     }
-  }, [token]);
+  }, [token, showToast]);
 
   useEffect(() => {
     fetchData();
@@ -78,35 +81,26 @@ export default function ExpensesPage() {
     fetchData();
   };
   
-  const handleEditClick = (expense: any) => {
+  const handleEditClick = (expense: Expense) => {
     setEditingExpense(expense);
     setIsModalOpen(true);
   };
   
   const handleDeleteExpense = async (expenseId: string) => {
-    try {
-      await api.delete(`/expense/${expenseId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      fetchData();
-    } catch (err: any) {
-      setError(err.response?.data?.message || "Failed to delete the expense.");
+    if (window.confirm('Are you sure you want to delete this expense?')) {
+        try {
+          await api.delete(`/expense/${expenseId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          showToast('Expense deleted successfully.', 'success');
+          fetchData();
+        } catch (err: any) {
+          setError(err.response?.data?.message || "Failed to delete the expense.");
+          showToast(err.response?.data?.message || "Failed to delete the expense.", 'error');
+        }
     }
   };
   
-  const handleViewReceipt = async (blobId: string) => {
-    try {
-      const response = await api.get(`/blob/${blobId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        responseType: 'blob',
-      });
-      const fileURL = URL.createObjectURL(response.data);
-      window.open(fileURL, '_blank');
-    } catch (err) {
-      setError("Could not load the receipt file.");
-    }
-  };
-
   if (loading) return <p>Loading expenses...</p>;
   if (error) return <p className="text-danger">{error}</p>;
 
@@ -137,7 +131,7 @@ export default function ExpensesPage() {
         expenses={filteredExpenses}
         onEdit={handleEditClick}
         onDelete={handleDeleteExpense}
-        onViewReceipt={handleViewReceipt}
+        actionsEnabled={activeTab === 'Drafts'}
       />
 
       {isModalOpen && (

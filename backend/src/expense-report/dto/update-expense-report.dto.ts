@@ -1,11 +1,15 @@
 // backend/src/expense-report/dto/update-expense-report.dto.ts
 
-import { IsNotEmpty, IsString } from 'class-validator'; // FIX: Add missing imports
+import { IsString, IsNotEmpty, IsOptional, IsArray, IsUUID } from 'class-validator';
 
-// For now, we only allow updating the title.
-// We can easily add other fields here later.
 export class UpdateExpenseReportDto {
   @IsString()
   @IsNotEmpty()
-  title: string;
+  @IsOptional()
+  title?: string;
+
+  @IsArray()
+  @IsUUID('all', { each: true })
+  @IsOptional()
+  expense_ids?: string[];
 }

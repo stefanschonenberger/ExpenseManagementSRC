@@ -27,16 +27,15 @@ export class ExpenseReport {
   @Column()
   title: string;
 
-  // Many-to-one relationship: Many reports can belong to one user.
-  @ManyToOne(() => User, { eager: true }) // eager: true automatically loads the user
+  @ManyToOne(() => User, { eager: true })
   user: User;
 
-  // Many-to-one relationship: Many reports can be approved by one manager.
   @ManyToOne(() => User, { eager: true, nullable: true })
-  approver: User;
+  approver: User | null;
 
-  // One-to-many relationship: One report can have many expenses.
-  @OneToMany(() => Expense, (expense) => expense.report)
+  @OneToMany(() => Expense, (expense) => expense.report, {
+    cascade: true, // Let TypeORM handle relationship updates automatically
+  })
   expenses: Expense[];
 
   @Column({

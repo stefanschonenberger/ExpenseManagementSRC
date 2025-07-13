@@ -1,13 +1,13 @@
-// src/components/CreateReportModal.tsx
+// frontend/src/components/CreateReportModal.tsx
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { X } from 'lucide-react';
+import { formatCurrency } from '@/lib/utils';
 
-// Define types for the modal's props and the expense data
 interface CreateReportModalProps {
   onClose: () => void;
   onReportAdded: () => void;
@@ -17,7 +17,8 @@ interface DraftExpense {
     id: string;
     title: string;
     amount: number;
-    currency_code: string;
+    supplier: string | null;
+    expense_date: string;
 }
 
 export default function CreateReportModal({ onClose, onReportAdded }: CreateReportModalProps) {
@@ -27,7 +28,6 @@ export default function CreateReportModal({ onClose, onReportAdded }: CreateRepo
   const [error, setError] = useState<string | null>(null);
   const token = useAuthStore((state) => state.token);
 
-  // Fetch draft expenses when the modal opens
   useEffect(() => {
     const fetchDraftExpenses = async () => {
       if (!token) return;
@@ -35,7 +35,6 @@ export default function CreateReportModal({ onClose, onReportAdded }: CreateRepo
         const response = await api.get('/expense', {
           headers: { Authorization: `Bearer ${token}` },
         });
-        // Filter for expenses that are in DRAFT status
         const drafts = response.data.filter((exp: any) => exp.status === 'DRAFT');
         setDraftExpenses(drafts);
       } catch (err) {
@@ -76,10 +75,18 @@ export default function CreateReportModal({ onClose, onReportAdded }: CreateRepo
       console.error(err);
     }
   };
+  
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-      <div className="w-full max-w-2xl p-6 bg-white rounded-lg shadow-xl">
+      <div className="w-full max-w-3xl p-6 bg-white rounded-lg shadow-xl">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold text-gray-900">Create New Report</h2>
           <button onClick={onClose} className="p-1 text-gray-400 rounded-full hover:bg-gray-100">
@@ -94,24 +101,37 @@ export default function CreateReportModal({ onClose, onReportAdded }: CreateRepo
           
           <div>
             <h3 className="text-lg font-medium text-gray-900">Available Draft Expenses</h3>
-            <div className="mt-2 space-y-2 overflow-y-auto max-h-60">
-              {draftExpenses.length > 0 ? draftExpenses.map(expense => (
-                <div key={expense.id} className="flex items-center p-2 border rounded-md">
-                  <input 
-                    type="checkbox" 
-                    id={`expense-${expense.id}`}
-                    checked={selectedExpenses.includes(expense.id)}
-                    onChange={() => handleSelectExpense(expense.id)}
-                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
-                  />
-                  <label htmlFor={`expense-${expense.id}`} className="flex justify-between flex-1 ml-3 text-sm">
-                    <span className="font-medium text-gray-800">{expense.title}</span>
-                    <span className="text-gray-500">{(expense.amount / 100).toFixed(2)} {expense.currency_code}</span>
-                  </label>
+            <div className="mt-2 border rounded-md">
+                <div className="flex px-4 py-2 text-xs font-semibold text-gray-500 uppercase bg-gray-50">
+                    <div className="w-1/12"></div>
+                    <div className="w-2/12">Date</div>
+                    <div className="w-3/12">Title</div>
+                    <div className="w-3/12">Supplier</div>
+                    <div className="w-3/12 text-right">Amount</div>
                 </div>
-              )) : (
-                <p className="text-sm text-gray-500">No draft expenses available to add.</p>
-              )}
+                <div className="overflow-y-auto max-h-60">
+                  {draftExpenses.length > 0 ? draftExpenses.map(expense => (
+                    <div key={expense.id} className="flex items-center px-4 py-2 border-t">
+                      <div className="w-1/12">
+                        <input 
+                          type="checkbox" 
+                          id={`expense-${expense.id}`}
+                          checked={selectedExpenses.includes(expense.id)}
+                          onChange={() => handleSelectExpense(expense.id)}
+                          className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary"
+                        />
+                      </div>
+                      <label htmlFor={`expense-${expense.id}`} className="flex items-center justify-between flex-1 ml-3 text-sm cursor-pointer">
+                        <div className="w-2/12 text-gray-600">{formatDate(expense.expense_date)}</div>
+                        <div className="w-3/12 font-medium text-gray-800">{expense.title}</div>
+                        <div className="w-3/12 text-gray-600">{expense.supplier || 'N/A'}</div>
+                        <div className="w-3/12 text-right text-gray-800">{formatCurrency(expense.amount)}</div>
+                      </label>
+                    </div>
+                  )) : (
+                    <p className="p-4 text-sm text-center text-gray-500">No draft expenses available to add.</p>
+                  )}
+                </div>
             </div>
           </div>
 

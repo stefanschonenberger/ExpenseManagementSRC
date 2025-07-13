@@ -1,3 +1,5 @@
+// backend/src/expense/expense.service.ts
+
 import {
   Injectable,
   NotFoundException,
@@ -31,7 +33,6 @@ export class ExpenseService {
     });
 
     if (newExpense.vat_applied) {
-      // If vat_amount is provided in the DTO, use it. Otherwise, calculate it.
       if (createExpenseDto.vat_amount !== undefined) {
         newExpense.vat_amount = createExpenseDto.vat_amount;
       } else {
@@ -62,7 +63,6 @@ export class ExpenseService {
 
     if (updateExpenseDto.amount !== undefined || updateExpenseDto.vat_applied !== undefined) {
       if (expense.vat_applied) {
-        // If vat_amount is provided in the DTO, use it. Otherwise, calculate it.
         if (updateExpenseDto.vat_amount !== undefined) {
             expense.vat_amount = updateExpenseDto.vat_amount;
         } else {

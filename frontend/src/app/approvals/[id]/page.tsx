@@ -1,8 +1,7 @@
-// ==========================================================
-// File: src/app/approvals/[id]/page.tsx
-// This is the complete and corrected version of the file.
-// ==========================================================
+// frontend/src/app/approvals/[id]/page.tsx
+
 'use client';
+
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/api';
@@ -12,12 +11,28 @@ import RejectReportModal from '@/components/RejectReportModal';
 import { formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
 import { useToastStore } from '@/lib/toastStore';
+import ReceiptPreviewModal from '@/components/ReceiptPreviewModal'; // Import the modal
 
 interface Expense {
-  id: string; title: string; amount: number; vat_amount: number; expense_date: string; currency_code: string; supplier: string | null; receipt_blob_id: string | null; book: boolean; expense_type: string;
+  id: string; 
+  title: string; 
+  amount: number; 
+  vat_amount: number; 
+  expense_date: string; 
+  currency_code: string; 
+  supplier: string | null; 
+  receipt_blob_id: string | null; 
+  book: boolean; 
+  expense_type: string;
 }
+
 interface ReportDetails {
-  id: string; title: string; total_amount: number; status: string; user: { full_name: string }; expenses: Expense[];
+  id: string; 
+  title: string; 
+  total_amount: number; 
+  status: string; 
+  user: { full_name: string }; 
+  expenses: Expense[];
 }
 
 export default function ApprovalDetailPage() {
@@ -30,6 +45,11 @@ export default function ApprovalDetailPage() {
   const [isRejectModalOpen, setRejectModalOpen] = useState(false);
   const token = useAuthStore((state) => state.token);
   const showToast = useToastStore((state) => state.showToast);
+
+  // State for the inline receipt preview
+  const [isPreviewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewMimeType, setPreviewMimeType] = useState('');
 
   const fetchReportDetails = useCallback(async () => {
     if (!token || !reportId) return;
@@ -85,15 +105,28 @@ export default function ApprovalDetailPage() {
     try {
       const response = await api.get(`/blob/${blobId}`, {
         headers: { Authorization: `Bearer ${token}` },
-        responseType: 'arraybuffer',
+        responseType: 'blob', // Use 'blob' to handle file data
       });
       const blob = new Blob([response.data], { type: response.headers['content-type'] });
       const url = window.URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      
+      setPreviewUrl(url);
+      setPreviewMimeType(blob.type);
+      setPreviewOpen(true);
+
     } catch (error) {
       console.error('Error fetching receipt:', error);
       showToast('Could not display receipt.', 'error');
     }
+  };
+
+  const handleClosePreview = () => {
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+    }
+    setPreviewOpen(false);
+    setPreviewUrl('');
+    setPreviewMimeType('');
   };
 
   if (loading) return <p>Loading report details...</p>;
@@ -149,6 +182,13 @@ export default function ApprovalDetailPage() {
             </table>
         </div>
         {isRejectModalOpen && <RejectReportModal onClose={() => setRejectModalOpen(false)} onReject={handleReject} />}
+        
+        <ReceiptPreviewModal
+            isOpen={isPreviewOpen}
+            onClose={handleClosePreview}
+            previewUrl={previewUrl}
+            mimeType={previewMimeType}
+        />
     </div>
   );
 }

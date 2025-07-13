@@ -1,9 +1,9 @@
+// src/app/reports/page.tsx
 'use client';
-
 import { useEffect, useState, useCallback } from 'react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { PlusCircle, Trash2, Eye, Download, AlertCircle } from 'lucide-react';
+import { PlusCircle, Trash2, Eye, Download, Loader2 } from 'lucide-react';
 import CreateReportModal from '@/components/CreateReportModal';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/utils';
@@ -23,6 +23,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null); // Track which PDF is being generated
   const token = useAuthStore((state) => state.token);
   const showToast = useToastStore((state) => state.showToast);
 
@@ -31,7 +32,9 @@ export default function ReportsPage() {
     try {
       setLoading(true);
       const response = await api.get('/expense-report', { headers: { Authorization: `Bearer ${token}` } });
-      setReports(response.data);
+      // Sort reports by creation date, oldest first
+      const sortedReports = response.data.sort((a: Report, b: Report) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      setReports(sortedReports);
     } catch (err) {
       setError('Failed to fetch reports.');
     } finally {
@@ -59,6 +62,7 @@ export default function ReportsPage() {
   };
 
   const handleDownloadReport = async (reportId: string) => {
+    setGeneratingPdfId(reportId);
     try {
       showToast('Generating your PDF... please wait.', 'info');
       const response = await api.get(`/expense-report/${reportId}/pdf`, {
@@ -77,7 +81,17 @@ export default function ReportsPage() {
     } catch (err) {
       showToast("Failed to download the report PDF.", "error");
       console.error(err);
+    } finally {
+        setGeneratingPdfId(null);
     }
+  };
+  
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
   };
 
   if (loading) return <p>Loading reports...</p>;
@@ -111,7 +125,7 @@ export default function ReportsPage() {
             {reports.map((report) => (
               <tr key={report.id} className={report.status === 'REJECTED' ? 'bg-red-50' : ''}>
                 <td className="px-6 py-4 text-sm font-medium text-gray-900 whitespace-nowrap">{report.title}</td>
-                <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{new Date(report.created_at).toLocaleDateString()}</td>
+                <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatDate(report.created_at)}</td>
                 <td className="px-6 py-4 text-sm text-right text-gray-500 whitespace-nowrap">{formatCurrency(report.total_amount)}</td>
                 <td className="px-6 py-4 text-sm text-center text-gray-500 whitespace-nowrap">
                   <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
@@ -133,8 +147,17 @@ export default function ReportsPage() {
                     </button>
                   )}
                   {report.status === 'APPROVED' && (
-                    <button onClick={() => handleDownloadReport(report.id)} className="text-success hover:text-green-700" title="Download PDF">
-                      <Download className="w-5 h-5" />
+                    <button 
+                        onClick={() => handleDownloadReport(report.id)} 
+                        className="text-success hover:text-green-700 disabled:text-gray-400" 
+                        title="Download PDF"
+                        disabled={generatingPdfId === report.id}
+                    >
+                        {generatingPdfId === report.id ? (
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                        ) : (
+                            <Download className="w-5 h-5" />
+                        )}
                     </button>
                   )}
                 </td>

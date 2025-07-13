@@ -245,7 +245,7 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
         </div>
         <div className="flex justify-end flex-shrink-0 pt-4 mt-4 border-t">
           <button onClick={onClose} type="button" className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50">Cancel</button>
-          <button type="submit" className="inline-flex items-center justify-center px-4 py-2 ml-3 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-primary hover:bg-primary-hover">
+          <button onClick={handleConfirm} type="submit" className="inline-flex items-center justify-center px-4 py-2 ml-3 text-sm font-medium text-white border border-transparent rounded-md shadow-sm bg-primary hover:bg-primary-hover">
             <Check className="w-4 h-4 mr-2"/>
             Confirm Selections
           </button>

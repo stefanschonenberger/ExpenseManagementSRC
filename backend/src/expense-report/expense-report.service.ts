@@ -8,7 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, Repository, EntityManager } from 'typeorm';
 import { Expense, ExpenseStatus } from 'src/expense/entities/expense.entity';
 import { User } from 'src/user/entities/user.entity';
 import { CreateExpenseReportDto } from './dto/create-expense-report.dto';
@@ -37,6 +37,7 @@ export class ExpenseReportService {
     private readonly emailService: EmailService,
     private readonly pdfService: PdfService,
     private readonly adminService: AdminService,
+    private readonly entityManager: EntityManager,
   ) {}
 
   private cleanReportResponse(report: ExpenseReport): any {
@@ -76,6 +77,7 @@ export class ExpenseReportService {
         user: cleanUser(report.user),
         approver: cleanUser(report.approver),
         expenses: cleanExpenses(report.expenses),
+        rejection_reason: report.rejection_reason,
     };
   }
 
@@ -107,7 +109,7 @@ export class ExpenseReportService {
 
     return this.findOneForUser(savedReport.id, user);
   }
-
+  
   async findAllForUser(user: User): Promise<any[]> {
     const reports = await this.reportRepository.find({
       where: { user: { id: user.id } },
@@ -129,14 +131,47 @@ export class ExpenseReportService {
   }
 
   async update(id: string, updateDto: UpdateExpenseReportDto, user: User): Promise<any> {
-    const report = await this.reportRepository.findOneBy({ id, user: { id: user.id } });
-    if (!report) throw new NotFoundException();
-    if (report.status !== ReportStatus.DRAFT) {
-      throw new ForbiddenException('Can only update reports in DRAFT status.');
-    }
-    Object.assign(report, updateDto);
-    await this.reportRepository.save(report);
-    return this.findOneForUser(report.id, user);
+    return this.entityManager.transaction(async transactionalEntityManager => {
+        const reportRepo = transactionalEntityManager.getRepository(ExpenseReport);
+        const expenseRepo = transactionalEntityManager.getRepository(Expense);
+
+        const report = await reportRepo.findOne({ 
+            where: { id, user: { id: user.id } },
+            relations: ['expenses'] 
+        });
+
+        if (!report) throw new NotFoundException(`Report with ID "${id}" not found.`);
+        if (report.status !== ReportStatus.DRAFT) {
+          throw new ForbiddenException('Can only update reports in DRAFT status.');
+        }
+
+        if (updateDto.title) {
+            report.title = updateDto.title;
+        }
+
+        if (updateDto.expense_ids) {
+            const newExpenses = await expenseRepo.find({
+                where: { id: In(updateDto.expense_ids), user: { id: user.id } }
+            });
+
+            if (newExpenses.length !== updateDto.expense_ids.length) {
+                throw new BadRequestException('One or more selected expenses were not found or do not belong to you.');
+            }
+            for (const expense of newExpenses) {
+                if (expense.status !== ExpenseStatus.DRAFT) {
+                    throw new BadRequestException(`Expense "${expense.title}" is not in a draft state and cannot be added.`);
+                }
+            }
+            
+            report.expenses = newExpenses;
+            report.total_amount = newExpenses.reduce((sum, e) => sum + e.amount, 0);
+            report.total_vat_amount = newExpenses.reduce((sum, e) => sum + (e.vat_amount || 0), 0);
+        }
+        
+        await reportRepo.save(report);
+
+        return this.findOneForUser(id, user);
+    });
   }
 
   async remove(id: string, user: User): Promise<void> {
@@ -217,7 +252,7 @@ export class ExpenseReportService {
     }
     return report;
   }
-
+  
   private async updateExpenseStatus(expenses: Expense[], status: ExpenseStatus): Promise<void> {
     if (expenses && expenses.length > 0) {
       const expenseIds = expenses.map(e => e.id);
@@ -254,11 +289,13 @@ export class ExpenseReportService {
     const report = await this.findReportAsManager(reportId, manager);
     report.status = ReportStatus.DRAFT;
     report.rejection_reason = rejectDto.reason;
+    report.approver = null;
     
     const savedReport = await this.reportRepository.save(report);
     await this.updateExpenseStatus(report.expenses, ExpenseStatus.DRAFT);
     
-    await this.emailService.sendRejectionNotification(savedReport, savedReport.user);
+    // FIX: Pass the 'manager' object to the notification function
+    await this.emailService.sendRejectionNotification(savedReport, savedReport.user, manager);
     this.logger.log(`Report ${reportId} rejected. Email notification sent.`);
     
     return this.findOneForUser(savedReport.id, savedReport.user);
