@@ -32,6 +32,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
    */
   async validate(payload: any) {
     // FIX: Include the 'roles' array in the returned user object.
-    return { id: payload.sub, email: payload.email, roles: payload.roles };
+    return { id: payload.sub, email: payload.email, roles: payload.roles, full_name: payload.full_name };
   }
 }
