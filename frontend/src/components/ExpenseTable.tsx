@@ -71,6 +71,7 @@ export default function ExpenseTable({ expenses, onEdit, onDelete, actionsEnable
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Title</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Supplier</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">Amount</th>
+            <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">Book Amount</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">VAT</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Receipt</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Actions</th>
@@ -83,6 +84,7 @@ export default function ExpenseTable({ expenses, onEdit, onDelete, actionsEnable
               <td className="px-6 py-4 whitespace-nowrap">{expense.title}</td>
               <td className="px-6 py-4 whitespace-nowrap">{expense.supplier || 'N/A'}</td>
               <td className="px-6 py-4 text-right whitespace-nowrap">{formatCurrency(expense.amount)}</td>
+              <td className="px-6 py-4 text-right whitespace-nowrap">{expense.book ? formatCurrency(expense.book_amount) : '-'}</td>
               <td className="px-6 py-4 text-right whitespace-nowrap">{formatCurrency(expense.vat_amount)}</td>
               <td className="px-6 py-4 text-center whitespace-nowrap">
                 {expense.receipt_blob_id && (

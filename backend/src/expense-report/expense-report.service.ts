@@ -63,6 +63,7 @@ export class ExpenseReportService {
             currency_code: exp.currency_code,
             expense_type: exp.expense_type,
             book: exp.book,
+            book_amount: exp.book_amount,
             vat_applied: exp.vat_applied,
             vat_amount: exp.vat_amount,
             receipt_blob_id: exp.receipt_blob_id,
@@ -294,7 +295,6 @@ export class ExpenseReportService {
     const savedReport = await this.reportRepository.save(report);
     await this.updateExpenseStatus(report.expenses, ExpenseStatus.DRAFT);
     
-    // FIX: Pass the 'manager' object to the notification function
     await this.emailService.sendRejectionNotification(savedReport, savedReport.user, manager);
     this.logger.log(`Report ${reportId} rejected. Email notification sent.`);
     

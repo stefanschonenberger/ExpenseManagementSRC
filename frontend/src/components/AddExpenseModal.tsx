@@ -18,6 +18,7 @@ interface Expense {
   vat_applied: boolean;
   expense_type: string;
   book: boolean;
+  book_amount?: number;
   vat_amount: number;
   receipt_blob_id: string | null; // Ensure this is part of the interface
 }
@@ -41,6 +42,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   const [expenseType, setExpenseType] = useState('');
   const [receiptFile, setReceiptFile] = useState<File | null>(null);
   const [book, setBook] = useState(false);
+  const [bookAmount, setBookAmount] = useState('');
   
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -111,10 +113,12 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
       setVatAmount(expenseToEdit.vat_applied ? (expenseToEdit.vat_amount / 100).toFixed(2) : '');
       setExpenseType(expenseToEdit.expense_type || '');
 	    setBook(expenseToEdit.book || false);
+      setBookAmount(expenseToEdit.book && expenseToEdit.book_amount ? (expenseToEdit.book_amount / 100).toFixed(2) : '');
       loadExistingReceipt();
     } else if (!isEditMode && expenseTypes.length > 0) {
       setExpenseType(expenseTypes[0]);
 	    setBook(false);
+      setBookAmount('');
       setExpenseDate(getTodayString());
       setReceiptFile(null);
       setReceiptImageSrc('');
@@ -122,7 +126,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
       setOcrOverlayImageSrc('');
       setScannedBlobId(null);
     }
-  }, [isEditMode, expenseToEdit, expenseTypes, token]);
+  }, [isEditMode, expenseToEdit, expenseTypes, token, showToast]);
 
   useEffect(() => {
     if (vatApplied && amount) {
@@ -266,6 +270,10 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
         receipt_blob_id: scannedBlobId,
       };
 
+      if (book) {
+          payload.book_amount = Math.round(parseFloat(bookAmount) * 100);
+      }
+
       if (vatApplied) {
         payload.vat_amount = Math.round(parseFloat(vatAmount) * 100);
       }
@@ -365,9 +373,34 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
                   </div>
               )}
                 <div className="flex items-center">
-                  <input id="book_expense" name="book_expense" type="checkbox" checked={book} onChange={(e) => setBook(e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
+                  <input 
+                    id="book_expense" 
+                    name="book_expense" 
+                    type="checkbox" 
+                    checked={book} 
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      setBook(isChecked);
+                      if (isChecked) {
+                        // When the box is checked, default the book amount to the current total amount.
+                        // The user can then override this. It will not be reset if the total amount changes.
+                        setBookAmount(amount);
+                      } else {
+                        // When the box is unchecked, clear the book amount.
+                        setBookAmount('');
+                      }
+                    }} 
+                    className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" 
+                  />
                   <label htmlFor="book_expense" className="block ml-2 text-sm text-gray-900">Book</label>
-              </div>
+                </div>
+
+                {book && (
+                    <div>
+                        <label htmlFor="bookAmount" className="block text-sm font-medium text-gray-700">Book Amount</label>
+                        <input type="text" id="bookAmount" value={bookAmount} onChange={(e) => setBookAmount(e.target.value.replace(/[^0-9.]/g, ''))} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                    </div>
+                )}
 
               {error && <p className="text-sm text-center text-danger">{error}</p>}
               <div className="flex justify-end pt-4 mt-auto space-x-2">

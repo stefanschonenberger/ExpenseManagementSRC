@@ -23,6 +23,7 @@ interface Expense {
   supplier: string | null; 
   receipt_blob_id: string | null; 
   book: boolean; 
+  book_amount: number;
   expense_type: string;
 }
 
@@ -158,6 +159,7 @@ export default function ApprovalDetailPage() {
                         <th className="w-12 px-6 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Book</th>
                         <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Supplier</th>
                         <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">Amount</th>
+                        <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">Book Amount</th>
                         <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">VAT</th>
                         <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">Actions</th>
                     </tr>
@@ -171,13 +173,14 @@ export default function ApprovalDetailPage() {
                             <td className="px-6 py-4 text-center">{expense.book && <Check className="w-5 h-5 mx-auto text-success" />}</td>
                             <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{expense.supplier}</td>
                             <td className="px-6 py-4 text-sm text-right text-gray-500 whitespace-nowrap">{formatCurrency(expense.amount)}</td>
+                            <td className="px-6 py-4 text-sm text-right text-gray-500 whitespace-nowrap">{expense.book && typeof expense.book_amount === 'number' ? formatCurrency(expense.book_amount) : '-'}</td>
                             <td className="px-6 py-4 text-sm text-right text-gray-500 whitespace-nowrap">{expense.vat_amount > 0 ? formatCurrency(expense.vat_amount) : '-'}</td>
                             <td className="px-6 py-4 text-sm text-right whitespace-nowrap">{expense.receipt_blob_id && (<button onClick={() => handleViewReceipt(expense.receipt_blob_id!)} className="text-primary hover:text-primary-hover" title="View Receipt"><Eye className="w-5 h-5" /></button>)}</td>
                         </tr>
                     ))}
                 </tbody>
                 <tfoot className="bg-gray-50">
-                    <tr><td colSpan={7} className="px-6 py-3 text-sm font-semibold text-right text-gray-900">Total</td><td className="px-6 py-3 text-sm font-semibold text-right text-gray-900">{formatCurrency(report.total_amount)}</td></tr>
+                    <tr><td colSpan={8} className="px-6 py-3 text-sm font-semibold text-right text-gray-900">Total</td><td className="px-6 py-3 text-sm font-semibold text-right text-gray-900">{formatCurrency(report.total_amount)}</td></tr>
                 </tfoot>
             </table>
         </div>

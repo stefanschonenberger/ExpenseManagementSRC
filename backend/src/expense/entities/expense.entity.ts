@@ -28,7 +28,6 @@ export class Expense {
   @ManyToOne(() => ExpenseReport, (report) => report.expenses, {
     nullable: true,
   })
-  // FIX: The type must also allow null to match the database schema.
   report: ExpenseReport | null;
 
   @Column()
@@ -53,7 +52,10 @@ export class Expense {
   expense_type: string;
   
   @Column({ type: 'boolean', default: false })
-  book: boolean; // The new field
+  book: boolean;
+
+  @Column({ type: 'int', default: 0 })
+  book_amount: number;
 
   @Column({ default: false })
   vat_applied: boolean;

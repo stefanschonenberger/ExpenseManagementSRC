@@ -15,6 +15,7 @@ export interface Expense {
   vat_applied: boolean;
   expense_type: string;
   book: boolean;
+  book_amount: number;
   description?: string; // Optional property
 }
 

@@ -43,6 +43,12 @@ export class ExpenseService {
       newExpense.vat_amount = 0;
     }
 
+    if (newExpense.book) {
+        newExpense.book_amount = createExpenseDto.book_amount ?? newExpense.amount;
+    } else {
+        newExpense.book_amount = 0;
+    }
+
     return this.expenseRepository.save(newExpense);
   }
 
@@ -73,6 +79,15 @@ export class ExpenseService {
         expense.vat_amount = 0;
       }
     }
+
+    if (updateExpenseDto.book !== undefined) {
+        if (expense.book) {
+            expense.book_amount = updateExpenseDto.book_amount ?? expense.amount;
+        } else {
+            expense.book_amount = 0;
+        }
+    }
+
 
     return this.expenseRepository.save(expense);
   }
