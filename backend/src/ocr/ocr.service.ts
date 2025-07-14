@@ -39,9 +39,7 @@ export class OcrService {
 
     try {
       await fs.writeFile(inputPdfPath, pdfBuffer);
-      // NOTE: Ensure Ghostscript is installed and in the system's PATH.
-      // 'gswin64c.exe' is for Windows. Use 'gs' on Linux/macOS.
-      const gsExecutable = 'gswin64c.exe';
+      
       const gsArgs = [
         '-q',
         '-dNODISPLAY',
@@ -78,7 +76,6 @@ export class OcrService {
       await fs.writeFile(inputPdfPath, pdfBuffer);
       this.logger.debug(`Temporary PDF written to: ${inputPdfPath}`);
 
-      const gsExecutable = 'gswin64c.exe'; 
       const gsArgs = [
         '-sDEVICE=png16m',
         '-r300', // High resolution for better OCR quality
