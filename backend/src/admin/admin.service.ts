@@ -12,6 +12,8 @@ import { AdminResetPasswordDto } from 'src/user/dto/admin-reset-password.dto';
 import { User } from 'src/user/entities/user.entity';
 import { CreateUserDto } from 'src/user/dto/create-user.dto';
 import { UpdateUserDto } from 'src/user/dto/update-user.dto';
+import { BlobService } from 'src/blob/blob.service';
+import { Expense } from 'src/expense/entities/expense.entity';
 
 @Injectable()
 export class AdminService {
@@ -20,7 +22,11 @@ export class AdminService {
         @InjectRepository(ManagementRelationship)
         private readonly managementRepository: Repository<ManagementRelationship>,
         @InjectRepository(AdminSettings)
-        private readonly settingsRepository: Repository<AdminSettings>
+        private readonly settingsRepository: Repository<AdminSettings>,
+        // Inject the BlobService and the Expense repository
+        private readonly blobService: BlobService,
+        @InjectRepository(Expense)
+        private readonly expenseRepository: Repository<Expense>,
     ) {}
 
     // User Management Methods
@@ -78,4 +84,34 @@ export class AdminService {
         Object.assign(settings, dto);
         return this.settingsRepository.save(settings);
     }
+    
+    async cleanupOrphanedBlobs(): Promise<{ deletedCount: number }> {
+        // This is a placeholder for how you'd get all blob IDs.
+        // In a real scenario with a separate blob DB, you might need a direct query.
+        // For now, let's assume we can get them. We'll need to modify the Blob service for this.
+        // See the next step.
+        const allBlobIds = await this.blobService.findAllBlobIds();
+
+        // Find all blob IDs that are actually linked to an expense.
+        const usedBlobIds = (await this.expenseRepository
+            .createQueryBuilder("expense")
+            .select("DISTINCT expense.receipt_blob_id", "id")
+            .where("expense.receipt_blob_id IS NOT NULL")
+            .getRawMany())
+            .map(e => e.id);
+
+        // Determine which blobs are orphans.
+        const orphanedIds = allBlobIds.filter(id => !usedBlobIds.includes(id));
+
+        if (orphanedIds.length > 0) {
+            console.log(`Found ${orphanedIds.length} orphaned blobs to delete.`);
+            for (const id of orphanedIds) {
+                // We'll use the existing deleteBlob method.
+                await this.blobService.deleteBlob(id);
+            }
+        }
+
+        return { deletedCount: orphanedIds.length };
+    }
+
 }

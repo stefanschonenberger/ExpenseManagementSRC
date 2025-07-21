@@ -55,5 +55,8 @@ export class AdminController {
     @Put('settings')
     updateSettings(@Body() settingsDto: Partial<AdminSettings>) { return this.adminService.updateSettings(settingsDto); }
 	
-	
+	@Post('blobs/cleanup')
+    cleanupOrphanedBlobs() {
+        return this.adminService.cleanupOrphanedBlobs();
+    }
 }

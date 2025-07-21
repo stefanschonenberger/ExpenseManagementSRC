@@ -6,6 +6,7 @@ import { useAuthStore } from '@/lib/store';
 import UserManagement from '@/components/admin/UserManagement';
 import RelationshipManager from '@/components/admin/RelationshipManager';
 import SettingsManager from '@/components/admin/SettingsManager';
+import BlobManager from '@/components/admin/BlobManager'; // <-- IMPORT THE NEW COMPONENT
 
 export default function AdminPage() {
     const [users, setUsers] = useState([]);
@@ -51,6 +52,7 @@ export default function AdminPage() {
                 </div>
                 <div className="xl:col-span-1">
                     {settings && <SettingsManager settings={settings} onDataChange={fetchData} />}
+                    <BlobManager />
                 </div>
             </div>
         </div>

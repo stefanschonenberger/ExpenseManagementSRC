@@ -44,4 +44,12 @@ export class BlobService {
             console.log(`BlobService: Successfully deleted blob with ID: ${id}`);
         }
     }
+
+    /**
+     * Finds all blob IDs in the database.
+     */
+    async findAllBlobIds(): Promise<string[]> {
+        const blobs = await this.blobRepository.find({ select: ["id"] });
+        return blobs.map(b => b.id);
+    }
 }
