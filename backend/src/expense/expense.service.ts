@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -16,6 +17,7 @@ import { AdminService } from 'src/admin/admin.service';
 
 @Injectable()
 export class ExpenseService {
+  private readonly logger = new Logger(ExpenseService.name);
   constructor(
     @InjectRepository(Expense)
     private readonly expenseRepository: Repository<Expense>,
@@ -49,7 +51,18 @@ export class ExpenseService {
         newExpense.book_amount = 0;
     }
 
-    return this.expenseRepository.save(newExpense);
+    const savedExpense = await this.expenseRepository.save(newExpense);
+
+    // --- Automated Cleanup Logic ---
+    if (createExpenseDto.transientOcrBlobId && createExpenseDto.transientOcrBlobId !== savedExpense.receipt_blob_id) {
+        this.logger.log(`Scheduling deletion of transient OCR blob: ${createExpenseDto.transientOcrBlobId}`);
+        // Asynchronously delete the temporary file without blocking the response
+        this.blobService.deleteBlob(createExpenseDto.transientOcrBlobId).catch(err => {
+            this.logger.error(`Failed to delete transient OCR blob ${createExpenseDto.transientOcrBlobId}`, err);
+        });
+    }
+
+    return savedExpense;
   }
 
   async update(

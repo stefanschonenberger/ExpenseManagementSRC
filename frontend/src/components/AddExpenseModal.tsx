@@ -32,7 +32,7 @@ interface AddExpenseModalProps {
 
 export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit, expenseTypes }: AddExpenseModalProps) {
   const getTodayString = () => new Date().toISOString().split('T')[0];
-
+  const [transientOcrBlobId, setTransientOcrBlobId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
   const [expenseDate, setExpenseDate] = useState(getTodayString());
@@ -75,10 +75,11 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
         setReceiptImageSrc(existingReceiptUrl);
 
         try {
-          const response = await api.head(existingReceiptUrl, {
-            headers: { Authorization: `Bearer ${token}` }
+          const response = await api.get(existingReceiptUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+            responseType: 'blob'
           });
-          const mime = response.headers['content-type'];
+          const mime = response.data.type;
           setReceiptMimeType(mime || null);
           console.log(`Fetched existing receipt mimetype: ${mime}`);
 
@@ -89,7 +90,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
           }
 
         } catch (err) {
-          console.error("Failed to fetch existing receipt mimetype:", err);
+          console.error("Failed to fetch existing receipt preview:", err);
           setReceiptMimeType(null);
           setReceiptImageSrc('');
           setOcrOverlayImageSrc('');
@@ -177,6 +178,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
         const constructedOcrImageUrl = `${api.defaults.baseURL}/blob/${ocrImageBlobId}`;
         setOcrOverlayImageSrc(constructedOcrImageUrl);
         setScanResult({ parsedData, overlay, ocrImageBlobId }); 
+        setTransientOcrBlobId(ocrImageBlobId);
         showToast('Scan complete. Please verify the details.', 'success');
         setOverlayOpen(true);
       } else {
@@ -197,51 +199,69 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
   const handleOverlayConfirm = (data: { total: string; date: string; supplier: string; }) => {
     const parseDate = (dateStr: string): string | null => {
         if (!dateStr) return null;
+
+        const monthMap: { [key: string]: string } = {
+            'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+            'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+        };
+
+        // 1. Check for YYYY-MM-DD format first
         const isoMatch = dateStr.match(/^\d{4}-\d{2}-\d{2}$/);
         if (isoMatch) return dateStr;
 
-        const monthMap: { [key: string]: string } = { 'Jan': '01', 'Feb': '02', 'Mar': '03', 'Apr': '04', 'May': '05', 'Jun': '06', 'Jul': '07', 'Aug': '08', 'Sep': '09', 'Oct': '10', 'Nov': '11', 'Dec': '12' };
-        const ddMonYyyyMatch = dateStr.match(/^(\d{1,2})\s([A-Za-z]{3})\s(\d{4})$/);
-        if (ddMonYyyyMatch) {
-            const day = ddMonYyyyMatch[1].padStart(2, '0');
-            const month = monthMap[ddMonYyyyMatch[2]];
-            const year = ddMonYyyyMatch[3];
-            if (day && month && year) return `${year}-${month}-${day}`;
+        // 2. Try to match "DD Mon YYYY" format
+        const monthNameRegex = /(\d{1,2})\s*([A-Za-z]{3})\s*(\d{4})/;
+        const monthMatch = dateStr.match(monthNameRegex);
+        if (monthMatch) {
+            const day = monthMatch[1].padStart(2, '0');
+            const monthAbbr = monthMatch[2].toLowerCase();
+            const month = monthMap[monthAbbr];
+            const year = monthMatch[3];
+            if (month) return `${year}-${month}-${day}`;
         }
 
-        const ddMmYyyyMatch = dateStr.match(/^(\d{1,2})[\/\-. ](\d{1,2})[\/\-. ](\d{4})$/);
-        if (ddMmYyyyMatch) {
-            const day = ddMmYyyyMatch[1].padStart(2, '0');
-            const month = ddMmYyyyMatch[2].padStart(2, '0');
-            const year = ddMmYyyyMatch[3];
+        // 3. Fallback to numeric DD/MM/YYYY format
+        const numericDateRegex = /(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{4})/;
+        const numericMatch = dateStr.match(numericDateRegex);
+        if (numericMatch) {
+            const day = numericMatch[1].padStart(2, '0');
+            const month = numericMatch[2].padStart(2, '0');
+            const year = numericMatch[3];
             return `${year}-${month}-${day}`;
         }
-
-        try {
-            const dateObj = new Date(dateStr);
-            if (!isNaN(dateObj.getTime())) return dateObj.toISOString().split('T')[0];
-        } catch (e) {}
-
+        
         return null;
     };
 
     const parseCurrency = (currencyStr: string): string => {
         if (!currencyStr) return '';
-        const match = currencyStr.match(/(\d[\d\s,]*\.\d{2})/);
+        const match = currencyStr.match(/(\d[\d\s,]*(?:\.\d{1,2})?)/);
         return match ? match[0].replace(/[\s,]/g, '') : '';
     };
 
     setSupplier(data.supplier);
-    setTitle(data.supplier);
+    setTitle(data.supplier || 'Scanned Expense');
     
     const formattedDate = parseDate(data.date);
     if (formattedDate) {
         setExpenseDate(formattedDate);
     } else {
-        showToast(`Could not parse date: "${data.date}". Please enter it manually.`, 'error');
+        showToast(`Could not parse date: "${data.date}". Please correct it manually.`, 'error');
     }
 
-    setAmount(parseCurrency(data.total));
+    const parsedAmountStr = parseCurrency(data.total);
+    if (parsedAmountStr) {
+      const numericAmount = parseFloat(parsedAmountStr);
+      if (!isNaN(numericAmount)) {
+        setAmount(numericAmount.toFixed(2));
+      } else {
+        setAmount('');
+        showToast(`Could not parse amount: "${data.total}". Please correct it manually.`, 'error');
+      }
+    } else {
+      setAmount('');
+      showToast(`Could not parse amount: "${data.total}". Please correct it manually.`, 'error');
+    }
   };
   
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setIsDragging(true); };
@@ -268,6 +288,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
         expense_type: expenseType,
         currency_code: 'ZAR',
         receipt_blob_id: scannedBlobId,
+        transientOcrBlobId: transientOcrBlobId,
       };
 
       if (book) {
@@ -382,11 +403,8 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
                       const isChecked = e.target.checked;
                       setBook(isChecked);
                       if (isChecked) {
-                        // When the box is checked, default the book amount to the current total amount.
-                        // The user can then override this. It will not be reset if the total amount changes.
                         setBookAmount(amount);
                       } else {
-                        // When the box is unchecked, clear the book amount.
                         setBookAmount('');
                       }
                     }} 

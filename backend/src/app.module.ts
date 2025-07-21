@@ -3,6 +3,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
@@ -24,6 +25,9 @@ import { JwtAuthGuard } from './auth/guard/jwt-auth.guard'; // Import JwtAuthGua
       envFilePath: '.env',
     }),
 
+    // --- Scheduling Module ---
+    ScheduleModule.forRoot(),
+    
     // --- Database Connection for Application Data ---
     TypeOrmModule.forRoot({
       type: 'postgres',

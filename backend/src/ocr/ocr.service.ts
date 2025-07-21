@@ -23,15 +23,9 @@ export class OcrService {
   ) {}
 
   private getGhostscriptExecutable(): string {
-    // Read from environment variable, default to 'gs' for Linux/macOS environments
     return this.configService.get<string>('GHOSTSCRIPT_PATH', 'gs');
   }
 
-  /**
-   * Counts the number of pages in a PDF buffer using Ghostscript.
-   * @param pdfBuffer The buffer containing the PDF file data.
-   * @returns A promise that resolves to the number of pages.
-   */
   public async getPdfPageCount(pdfBuffer: Buffer): Promise<number> {
     const tempDir = os.tmpdir();
     const inputPdfPath = path.join(tempDir, `info_${Date.now()}.pdf`);
@@ -53,19 +47,12 @@ export class OcrService {
       return isNaN(pageCount) ? 0 : pageCount;
     } catch (error) {
       this.logger.error(`Failed to get PDF page count: ${error.message}`, error.stack);
-      return 0; // Return 0 if counting fails
+      return 0;
     } finally {
-      // Clean up the temporary file.
       await fs.unlink(inputPdfPath).catch(err => this.logger.warn(`Failed to delete temp info file: ${err.message}`));
     }
   }
 
-  /**
-   * Converts a specific page of a PDF buffer to a PNG image buffer.
-   * @param pdfBuffer The buffer containing the PDF file data.
-   * @param pageNumber The 1-based index of the page to convert.
-   * @returns A promise that resolves to a buffer containing the PNG image data.
-   */
   public async convertPdfPageToPng(pdfBuffer: Buffer, pageNumber: number): Promise<Buffer> {
     const tempDir = os.tmpdir();
     const inputPdfPath = path.join(tempDir, `input_${Date.now()}_p${pageNumber}.pdf`);
@@ -78,7 +65,7 @@ export class OcrService {
 
       const gsArgs = [
         '-sDEVICE=png16m',
-        '-r300', // High resolution for better OCR quality
+        '-r300',
         '-dQUIET',
         '-dBATCH',
         '-dNOPAUSE',
@@ -100,26 +87,16 @@ export class OcrService {
       this.logger.error(`Error during PDF to PNG conversion for page ${pageNumber}: ${error.message}`, error.stack);
       throw new Error(`Failed to convert page ${pageNumber} of PDF to image: ${error.message}`);
     } finally {
-        // Clean up temporary files.
         await fs.unlink(inputPdfPath).catch(err => this.logger.warn(`Failed to delete temp input file: ${err.message}`));
         await fs.unlink(outputPngPath).catch(err => this.logger.warn(`Failed to delete temp output file: ${err.message}`));
     }
   }
 
-  /**
-   * Scans a receipt file (image or PDF) using OCR.space API.
-   * If the file is a PDF, it converts the first page to an image before scanning.
-   * @param fileBuffer The buffer of the file to scan.
-   * @param mimetype The mimetype of the file.
-   * @param filename The original filename.
-   * @returns An object containing the parsed data, raw text, overlay info, and the image buffer used for OCR.
-   */
   async scanReceipt(fileBuffer: Buffer, mimetype: string, filename: string): Promise<any> {
     let imageBufferForOcr = fileBuffer;
     let imageMimeTypeForOcr = mimetype;
     let originalFilenameForOcr = filename;
 
-    // If it's a PDF, convert the first page to an image for OCR scanning.
     if (mimetype === 'application/pdf') {
       try {
         this.logger.log('Converting PDF to image for OCR...');
@@ -183,11 +160,6 @@ export class OcrService {
     }
   }
   
-  /**
-   * Parses the raw text from OCR.space to extract structured data like total, VAT, date, and supplier.
-   * @param text The raw text string from the OCR response.
-   * @returns An object with the parsed expense data.
-   */
   private parseOcrSpaceResponse(text: string): any {
     this.logger.debug('Parsing OCR.space text...');
     if (!text) {
@@ -201,16 +173,25 @@ export class OcrService {
     let date: string | null = null;
     let supplier = lines[0] || 'Scanned Expense';
 
-    const totalRegex = /(?:total|amount|pay|balance|due)[\s:]*R?([\d\s,]+\.\d{2})/i;
+    // This regex is now more flexible and will capture totals with or without a decimal part.
+    const totalRegex = /(?:total|amount|pay|balance|due)[\s:]*R?([\d\s,]*(?:\.\d{1,2})?)/i;
     const vatRegex = /(?:vat|tax)[\s:]*R?([\d\s,]+\.\d{2})/i;
-    const dateRegex = /(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{4})|(\d{4}-\d{2}-\d{2})/;
+    const dateRegex = /(\d{1,2}\s*[\/\-.]\s*\d{1,2}\s*[\/\-.]\s*\d{4})|(\d{4}-\d{2}-\d{2})/;
 
     const potentialTotals: number[] = [];
 
     lines.forEach(line => {
-        const totalMatch = line.match(totalRegex);
-        if (totalMatch && totalMatch[1]) {
+        // The word "Bill" is common, so let's look for "Bill Total" specifically
+        if (line.match(/bill total/i)) {
+          const totalMatch = line.match(/([\d\s,]*(?:\.\d{1,2})?)/i);
+          if (totalMatch && totalMatch[1]) {
             potentialTotals.push(parseFloat(totalMatch[1].replace(/[\s,]/g, '')));
+          }
+        } else {
+          const totalMatch = line.match(totalRegex);
+          if (totalMatch && totalMatch[1]) {
+              potentialTotals.push(parseFloat(totalMatch[1].replace(/[\s,]/g, '')));
+          }
         }
 
         const vatMatch = line.match(vatRegex);
@@ -230,14 +211,19 @@ export class OcrService {
 
     const parseSaDate = (dateStr: string | null): string | null => {
         if (!dateStr) return null;
-        const match = dateStr.replace(/\s/g, '').match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
+        const cleanedDateStr = dateStr.replace(/\s/g, '');
+        const match = cleanedDateStr.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/);
         if (match) {
             const day = match[1].padStart(2, '0');
             const month = match[2].padStart(2, '0');
             const year = match[3];
             return `${year}-${month}-${day}`;
         }
-        return new Date(dateStr).toISOString().split('T')[0];
+        try {
+          return new Date(dateStr).toISOString().split('T')[0];
+        } catch (e) {
+          return null;
+        }
     };
 
     const parsedData = {

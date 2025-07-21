@@ -2,7 +2,7 @@
 // File: src/user/entities/user.entity.ts
 // This file is updated to use 'roles' instead of 'role'.
 // ==========================================================
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, BeforeInsert, OneToMany } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateColumn, BeforeInsert, OneToMany, BeforeUpdate } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { ManagementRelationship } from './management-relationship.entity';
 
@@ -44,6 +44,14 @@ export class User {
 
   @UpdateDateColumn()
   updated_at: Date;
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  emailToLowerCase() {
+      if (this.email) {
+          this.email = this.email.toLowerCase();
+      }
+  }
 
   @BeforeInsert()
   async hashPassword() {

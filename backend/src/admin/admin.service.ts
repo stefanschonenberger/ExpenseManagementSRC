@@ -2,7 +2,7 @@
 // File: src/admin/admin.service.ts
 // This is the complete and correct service file.
 // ==========================================================
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ManagementRelationship } from 'src/user/entities/management-relationship.entity';
 import { UserService } from 'src/user/user.service';
@@ -14,9 +14,11 @@ import { CreateUserDto } from 'src/user/dto/create-user.dto';
 import { UpdateUserDto } from 'src/user/dto/update-user.dto';
 import { BlobService } from 'src/blob/blob.service';
 import { Expense } from 'src/expense/entities/expense.entity';
+import { Cron, CronExpression } from '@nestjs/schedule';
 
 @Injectable()
 export class AdminService {
+    private readonly logger = new Logger(AdminService.name);
     constructor(
         private readonly userService: UserService,
         @InjectRepository(ManagementRelationship)
@@ -112,6 +114,24 @@ export class AdminService {
         }
 
         return { deletedCount: orphanedIds.length };
+    }
+    /**
+     * 3. Add the scheduled task method.
+     * This will run at 2:00 AM every Monday.
+     * You can use CronExpression.EVERY_MONDAY_AT_2AM for readability.
+     */
+    @Cron('0 2 * * 1', {
+        name: 'deleteOrphanedBlobs',
+        timeZone: 'Africa/Johannesburg',
+    })
+    async handleCron() {
+        this.logger.log('Running scheduled job: Deleting orphaned blob files...');
+        try {
+            const { deletedCount } = await this.cleanupOrphanedBlobs();
+            this.logger.log(`Orphaned blob cleanup complete. Deleted ${deletedCount} file(s).`);
+        } catch (error) {
+            this.logger.error('Scheduled orphan blob cleanup failed.', error.stack);
+        }
     }
 
 }

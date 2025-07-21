@@ -3,7 +3,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Check, DollarSign, Calendar, Building, FileText } from 'lucide-react'; // FIX: Added FileText import
+import { X, Check, DollarSign, Calendar, Building, FileText } from 'lucide-react';
 
 interface OcrWord {
   WordText: string;
@@ -55,11 +55,65 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
   const imageRef = useRef<HTMLImageElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  // Helper function to parse and format dates
+  const parseDate = (dateStr: string): string | null => {
+      if (!dateStr) return null;
+      const monthMap: { [key: string]: string } = {
+          'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04', 'may': '05', 'jun': '06',
+          'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+      };
+
+      const monthNameRegex = /(\d{1,2})\s*([A-Za-z]{3})\s*(\d{4})/;
+      const monthMatch = dateStr.match(monthNameRegex);
+      if (monthMatch) {
+          const day = monthMatch[1].padStart(2, '0');
+          const monthAbbr = monthMatch[2].toLowerCase();
+          const month = monthMap[monthAbbr];
+          const year = monthMatch[3];
+          if (month) {
+              return `${year}-${month}-${day}`;
+          }
+      }
+
+      // 2. Fallback to numeric DD/MM/YYYY format
+      const numericDateRegex = /(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{4})/;
+      const numericMatch = dateStr.match(numericDateRegex);
+      if (numericMatch) {
+          const day = numericMatch[1].padStart(2, '0');
+          const month = numericMatch[2].padStart(2, '0');
+          const year = numericMatch[3];
+          return `${year}-${month}-${day}`;
+      }
+      
+      // 3. Fallback for existing YYYY-MM-DD format
+      const isoMatch = dateStr.match(/^\d{4}-\d{2}-\d{2}$/);
+      if (isoMatch) {
+          return dateStr;
+      }
+      return null;
+  };
+
+  // Helper function to parse and format currency
+  const parseCurrency = (currencyStr: string): string | null => {
+      if (!currencyStr) return null;
+      const match = currencyStr.match(/(\d[\d\s,]*(?:\.\d{1,2})?)/);
+      const parsed = match ? match[0].replace(/[\s,]/g, '') : '';
+      if (parsed) {
+          const numeric = parseFloat(parsed);
+          if (!isNaN(numeric)) {
+              return numeric.toFixed(2);
+          }
+      }
+      return null;
+  };
+
+
   useEffect(() => {
     if (isOpen) {
       setSelectedSupplier(initialSupplier || scanResult?.parsedData?.supplier || '');
-      setSelectedDate(initialDate || scanResult?.parsedData?.expense_date || '');
-      setSelectedTotal(initialTotal || (scanResult?.parsedData?.amount ? (scanResult.parsedData.amount / 100).toFixed(2) : ''));
+      // Use the parsers for initial state as well
+      setSelectedDate(parseDate(initialDate || scanResult?.parsedData?.expense_date) || initialDate);
+      setSelectedTotal(parseCurrency(initialTotal || (scanResult?.parsedData?.amount ? (scanResult.parsedData.amount / 100).toFixed(2) : '')) || initialTotal);
     }
   }, [isOpen, initialSupplier, initialDate, initialTotal, scanResult]);
 
@@ -121,10 +175,12 @@ export default function OcrOverlayModal({ isOpen, onClose, onConfirm, scanResult
         setSelectedSupplier(lineText);
         break;
       case 'date':
-        setSelectedDate(lineText);
+        const parsedDate = parseDate(lineText);
+        setSelectedDate(parsedDate || lineText); // Instantly parse, fallback to raw text if it fails
         break;
       case 'total':
-        setSelectedTotal(lineText);
+        const parsedTotal = parseCurrency(lineText);
+        setSelectedTotal(parsedTotal || lineText); // Instantly parse, fallback to raw text if it fails
         break;
     }
   };

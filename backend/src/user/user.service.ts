@@ -4,7 +4,7 @@
 // ==========================================================
 import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Raw } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
 import { User, UserRole } from './entities/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
@@ -27,9 +27,9 @@ export class UserService {
     user.password_hash = await bcrypt.hash(newPassword, 10);
     await this.userRepository.save(user);
   }
-  
+
   async create(createUserDto: CreateUserDto): Promise<User> {
-    const existingUser = await this.userRepository.findOne({ where: { email: createUserDto.email } });
+    const existingUser = await this.userRepository.findOne({ where: { email: createUserDto.email.toLowerCase() } });
     if (existingUser) {
         throw new ConflictException('User with this email already exists');
     }
@@ -48,13 +48,13 @@ export class UserService {
     }
     return user;
   }
-  
+
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.findOne(id);
-    
+
     // The endpoint this is called from is already protected by the Admin guard.
     // An admin should be able to manage other admins, so the check is removed.
-    
+
     Object.assign(user, updateUserDto);
     return this.userRepository.save(user);
   }
@@ -66,9 +66,14 @@ export class UserService {
     await this.managementRepository.delete({ manager_id: id });
     await this.userRepository.remove(user);
   }
-  
+
   async findOneByEmail(email: string): Promise<User | null> {
-    return this.userRepository.findOne({ where: { email } });
+    // Perform a case-insensitive search to handle any existing, non-normalized data.
+    return this.userRepository.findOne({
+        where: {
+            email: Raw(alias => `LOWER(${alias}) = LOWER(:email)`, { email: email.toLowerCase() })
+        }
+    });
   }
 
   async findMyManagers(employee: User): Promise<User[]> {
@@ -78,14 +83,14 @@ export class UserService {
     });
     return relationships.map(rel => rel.manager).filter(Boolean);
   }
-  
+
   async isManagerOfAnyone(user: User): Promise<{ isManager: boolean }> {
     const count = await this.managementRepository.count({
       where: { manager_id: user.id },
     });
     return { isManager: count > 0 };
   }
-  
+
 	/**
      * Allows a user to change their own password.
      */
@@ -104,7 +109,7 @@ export class UserService {
 
         // 2. Hash the new password before saving
         user.password_hash = await bcrypt.hash(changePasswordDto.newPassword, 10);
-        
+
         // 3. Save the user with the new password hash
         await this.userRepository.save(user);
     }

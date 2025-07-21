@@ -51,4 +51,9 @@ export class CreateExpenseDto {
   @IsUUID()
   @IsOptional()
   receipt_blob_id?: string;
+
+  // This new field will carry the ID of the temporary file to be deleted.
+  @IsUUID()
+  @IsOptional()
+  transientOcrBlobId?: string;
 }
