@@ -203,11 +203,10 @@ export class PdfService {
       row: { height: 20, evenColor: whiteColor, oddColor: grayColor },
       columns: [
         { header: 'Date', key: 'date', width: (width - margin * 2) * 0.1, align: 'left' },
-        { header: 'Title', key: 'title', width: (width - margin * 2) * 0.15, align: 'left' },
-        { header: 'Category', key: 'type', width: (width - margin * 2) * 0.20, align: 'left' },
-        { header: 'Supplier', key: 'supplier', width: (width - margin * 2) * 0.20, align: 'left' },
-        { header: 'Book Amt', key: 'book_amount', width: (width - margin * 2) * 0.1, align: 'right' },
-        { header: 'VAT', key: 'vat', width: (width - margin * 2) * 0.1, align: 'right' },
+        { header: 'Title', key: 'title', width: (width - margin * 2) * 0.25, align: 'left' },
+        { header: 'Supplier', key: 'supplier', width: (width - margin * 2) * 0.2, align: 'left' },
+        { header: 'Book Amt', key: 'book_amount', width: (width - margin * 2) * 0.15, align: 'right' },
+        { header: 'VAT', key: 'vat', width: (width - margin * 2) * 0.15, align: 'right' },
         { header: 'Amount', key: 'amount', width: (width - margin * 2) * 0.15, align: 'right' },
       ],
     };
@@ -240,24 +239,20 @@ export class PdfService {
       page.drawRectangle({ x: table.x, y, width: table.width, height: -table.row.height, color: rowColor });
       
       let currentX = table.x;
-      const rowY = y - 13;
-      const fontSize = 7;
+      const rowY = y - 15;
 
-      drawCell(formatDate(expense.expense_date), table.columns[0], currentX, rowY, font, fontSize, fontColor);
+      drawCell(formatDate(expense.expense_date), table.columns[0], currentX, rowY, font, 9, fontColor);
       currentX += table.columns[0].width;
       
-      drawCell(expense.title, table.columns[1], currentX, rowY, font, fontSize, fontColor);
+      drawCell(expense.title, table.columns[1], currentX, rowY, font, 9, fontColor);
       currentX += table.columns[1].width;
-      
-      drawCell(expense.expense_type, table.columns[2], currentX, rowY, font, fontSize, fontColor);
+
+      drawCell(expense.supplier || 'N/A', table.columns[2], currentX, rowY, font, 9, fontColor);
       currentX += table.columns[2].width;
 
-      drawCell(expense.supplier || 'N/A', table.columns[3], currentX, rowY, font, fontSize, fontColor);
-      currentX += table.columns[3].width;
-
       const bookAmountText = expense.book ? formatCurrency(expense.book_amount) : '-';
-      drawCell(bookAmountText, table.columns[4], currentX, rowY, font, fontSize, fontColor);
-      currentX += table.columns[4].width;
+      drawCell(bookAmountText, table.columns[3], currentX, rowY, font, 9, fontColor);
+      currentX += table.columns[3].width;
 
       if (expense.book) {
         totalBookAmount += expense.book_amount;
@@ -266,10 +261,10 @@ export class PdfService {
         totalNonBookVat += expense.vat_amount;
       }
 
-      drawCell(formatCurrency(expense.vat_amount), table.columns[5], currentX, rowY, font, fontSize, fontColor);
-      currentX += table.columns[5].width;
+      drawCell(formatCurrency(expense.vat_amount), table.columns[4], currentX, rowY, font, 9, fontColor);
+      currentX += table.columns[4].width;
       
-      drawCell(formatCurrency(expense.amount), table.columns[6], currentX, rowY, font, fontSize, fontColor);
+      drawCell(formatCurrency(expense.amount), table.columns[5], currentX, rowY, font, 9, fontColor);
 
       totalAmount += expense.amount;
       totalVat += expense.vat_amount;
@@ -333,6 +328,7 @@ export class PdfService {
           const blob = await this.blobService.getBlobById(expense.receipt_blob_id);
           const processAndDrawImage = async (imageBuffer: Buffer, imageType: 'png' | 'jpeg', pageNumInfo: string) => {
             
+            // --- Image Compression with Sharp ---
             const compressedImageBuffer = await sharp(imageBuffer)
                 .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
                 .jpeg({ quality: 75, progressive: true })
