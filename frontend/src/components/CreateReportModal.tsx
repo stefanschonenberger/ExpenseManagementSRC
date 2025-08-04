@@ -19,6 +19,7 @@ interface DraftExpense {
     amount: number;
     supplier: string | null;
     expense_date: string;
+    expense_type: string; // Added the missing property
 }
 
 export default function CreateReportModal({ onClose, onReportAdded }: CreateReportModalProps) {
@@ -104,10 +105,10 @@ export default function CreateReportModal({ onClose, onReportAdded }: CreateRepo
             <div className="mt-2 border rounded-md">
                 <div className="flex px-4 py-2 text-xs font-semibold text-gray-500 uppercase bg-gray-50">
                     <div className="w-1/12"></div>
-                    <div className="w-2/12">Date</div>
-                    <div className="w-3/12">Title</div>
                     <div className="w-3/12">Supplier</div>
-                    <div className="w-3/12 text-right">Amount</div>
+                    <div className="w-4/12">Description</div>
+                    <div className="w-2/12">Category</div>
+                    <div className="w-2/12 text-right">Amount</div>
                 </div>
                 <div className="overflow-y-auto max-h-60">
                   {draftExpenses.length > 0 ? draftExpenses.map(expense => (
@@ -122,10 +123,10 @@ export default function CreateReportModal({ onClose, onReportAdded }: CreateRepo
                         />
                       </div>
                       <label htmlFor={`expense-${expense.id}`} className="flex items-center justify-between flex-1 ml-3 text-sm cursor-pointer">
-                        <div className="w-2/12 text-gray-600">{formatDate(expense.expense_date)}</div>
-                        <div className="w-3/12 font-medium text-gray-800">{expense.title}</div>
                         <div className="w-3/12 text-gray-600">{expense.supplier || 'N/A'}</div>
-                        <div className="w-3/12 text-right text-gray-800">{formatCurrency(expense.amount)}</div>
+                        <div className="w-4/12 font-medium text-gray-800">{expense.title}</div>
+                        <div className="w-2/12 text-gray-600">{expense.expense_type}</div>
+                        <div className="w-2/12 text-right text-gray-800">{formatCurrency(expense.amount)}</div>
                       </label>
                     </div>
                   )) : (

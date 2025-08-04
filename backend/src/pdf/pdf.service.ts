@@ -202,13 +202,12 @@ export class PdfService {
       header: { height: 25, color: primaryColor, fontColor: whiteColor },
       row: { height: 20, evenColor: whiteColor, oddColor: grayColor },
       columns: [
-        { header: 'Date', key: 'date', width: (width - margin * 2) * 0.1, align: 'left' },
-        { header: 'Title', key: 'title', width: (width - margin * 2) * 0.15, align: 'left' },
+        { header: 'Supplier', key: 'supplier', width: (width - margin * 2) * 0.25, align: 'left' },
+        { header: 'Description', key: 'title', width: (width - margin * 2) * 0.25, align: 'left' },
         { header: 'Category', key: 'type', width: (width - margin * 2) * 0.20, align: 'left' },
-        { header: 'Supplier', key: 'supplier', width: (width - margin * 2) * 0.20, align: 'left' },
         { header: 'Book Amt', key: 'book_amount', width: (width - margin * 2) * 0.1, align: 'right' },
         { header: 'VAT', key: 'vat', width: (width - margin * 2) * 0.1, align: 'right' },
-        { header: 'Amount', key: 'amount', width: (width - margin * 2) * 0.15, align: 'right' },
+        { header: 'Total', key: 'amount', width: (width - margin * 2) * 0.1, align: 'right' },
       ],
     };
 
@@ -225,8 +224,6 @@ export class PdfService {
     let totalAmount = 0;
     let totalVat = 0;
     let totalBookAmount = 0;
-    let totalNonBookAmount = 0;
-    let totalNonBookVat = 0;
     
     const sortedExpenses = [...report.expenses].sort((a, b) => new Date(a.expense_date).getTime() - new Date(b.expense_date).getTime());
 
@@ -243,36 +240,29 @@ export class PdfService {
       const rowY = y - 13;
       const fontSize = 7;
 
-      drawCell(formatDate(expense.expense_date), table.columns[0], currentX, rowY, font, fontSize, fontColor);
+      drawCell(expense.supplier || 'N/A', table.columns[0], currentX, rowY, font, fontSize, fontColor);
       currentX += table.columns[0].width;
-      
+
       drawCell(expense.title, table.columns[1], currentX, rowY, font, fontSize, fontColor);
       currentX += table.columns[1].width;
       
       drawCell(expense.expense_type, table.columns[2], currentX, rowY, font, fontSize, fontColor);
       currentX += table.columns[2].width;
 
-      drawCell(expense.supplier || 'N/A', table.columns[3], currentX, rowY, font, fontSize, fontColor);
+      const bookAmountText = expense.book ? formatCurrency(expense.book_amount) : '-';
+      drawCell(bookAmountText, table.columns[3], currentX, rowY, font, fontSize, fontColor);
       currentX += table.columns[3].width;
 
-      const bookAmountText = expense.book ? formatCurrency(expense.book_amount) : '-';
-      drawCell(bookAmountText, table.columns[4], currentX, rowY, font, fontSize, fontColor);
+      drawCell(formatCurrency(expense.vat_amount), table.columns[4], currentX, rowY, font, fontSize, fontColor);
       currentX += table.columns[4].width;
-
-      if (expense.book) {
-        totalBookAmount += expense.book_amount;
-      } else {
-        totalNonBookAmount += expense.amount;
-        totalNonBookVat += expense.vat_amount;
-      }
-
-      drawCell(formatCurrency(expense.vat_amount), table.columns[5], currentX, rowY, font, fontSize, fontColor);
-      currentX += table.columns[5].width;
       
-      drawCell(formatCurrency(expense.amount), table.columns[6], currentX, rowY, font, fontSize, fontColor);
+      drawCell(formatCurrency(expense.amount), table.columns[5], currentX, rowY, font, fontSize, fontColor);
 
       totalAmount += expense.amount;
       totalVat += expense.vat_amount;
+      if (expense.book) {
+        totalBookAmount += expense.book_amount;
+      }
       y -= table.row.height;
     });
 
@@ -295,22 +285,22 @@ export class PdfService {
     page.drawText(valueText, { x: col1RightEdge - textWidth, y: totalsY - 15, font: font, size: 10, color: fontColor });
 
     // --- Column 2: Non-Book Totals ---
-    const col2StartX = table.x + +10 + colWidth;
+    const col2StartX = table.x + colWidth;
     const col2RightEdge = col2StartX + colWidth - colPadding;
     page.drawText('Non-Book Totals', { x: col2StartX, y: totalsY, font: boldFont, size: 11, color: primaryColor });
-
+    const nonBookTotal = totalAmount - totalBookAmount;
     page.drawText('Subtotal:', { x: col2StartX, y: totalsY - 15, font: font, size: 10, color: fontColor });
-    valueText = formatCurrency(totalNonBookAmount);
+    valueText = formatCurrency(nonBookTotal);
     textWidth = font.widthOfTextAtSize(valueText, 10);
     page.drawText(valueText, { x: col2RightEdge - textWidth, y: totalsY - 15, font: font, size: 10, color: fontColor });
 
     page.drawText('VAT incl.:', { x: col2StartX, y: totalsY - 30, font: font, size: 10, color: fontColor });
-    valueText = formatCurrency(totalNonBookVat);
+    valueText = formatCurrency(totalVat);
     textWidth = font.widthOfTextAtSize(valueText, 10);
     page.drawText(valueText, { x: col2RightEdge - textWidth, y: totalsY - 30, font: font, size: 10, color: fontColor });
 
     // --- Column 3: Grand Totals ---
-    const col3StartX = table.x + 10 + colWidth * 2;
+    const col3StartX = table.x + (colWidth * 2);
     const col3RightEdge = col3StartX + colWidth - colPadding;
     page.drawText('Grand Totals', { x: col3StartX, y: totalsY, font: boldFont, size: 11, color: primaryColor });
 
@@ -323,7 +313,7 @@ export class PdfService {
     valueText = formatCurrency(totalVat);
     textWidth = boldFont.widthOfTextAtSize(valueText, 10);
     page.drawText(valueText, { x: col3RightEdge - textWidth, y: totalsY - 30, font: boldFont, size: 10, color: fontColor });
-
+    
     y -= 45;
 
     // --- Receipts Section ---

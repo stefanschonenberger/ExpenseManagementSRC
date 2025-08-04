@@ -14,6 +14,7 @@ interface Expense {
   amount: number;
   supplier: string | null;
   expense_date: string;
+  expense_type: string; // Ensure this is part of the interface
 }
 
 interface EditReportExpensesModalProps {
@@ -37,7 +38,6 @@ export default function EditReportExpensesModal({
   const showToast = useToastStore((state) => state.showToast);
 
   useEffect(() => {
-    // Set initial selection from the expenses already in the report
     setSelectedExpenseIds(currentExpenses.map(exp => exp.id));
 
     const fetchDraftExpenses = async () => {
@@ -58,15 +58,12 @@ export default function EditReportExpensesModal({
 
   const combinedExpenses = useMemo(() => {
     const expenseMap = new Map<string, Expense>();
-    // Add current expenses first to maintain their presence
     currentExpenses.forEach(exp => expenseMap.set(exp.id, exp));
-    // Add available drafts that aren't already in the report
     availableExpenses.forEach(exp => {
       if (!expenseMap.has(exp.id)) {
         expenseMap.set(exp.id, exp);
       }
     });
-    // Sort the combined list by date to ensure a stable render order
     return Array.from(expenseMap.values()).sort((a, b) => new Date(a.expense_date).getTime() - new Date(b.expense_date).getTime());
   }, [currentExpenses, availableExpenses]);
 
@@ -96,14 +93,6 @@ export default function EditReportExpensesModal({
     }
   };
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, '0');
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
-  };
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
       <div className="w-full max-w-3xl p-6 bg-white rounded-lg shadow-xl">
@@ -117,10 +106,10 @@ export default function EditReportExpensesModal({
             <div className="mt-2 border rounded-md">
               <div className="flex px-4 py-2 text-xs font-semibold text-gray-500 uppercase bg-gray-50">
                 <div className="w-1/12"></div>
-                <div className="w-2/12">Date</div>
-                <div className="w-3/12">Title</div>
                 <div className="w-3/12">Supplier</div>
-                <div className="w-3/12 text-right">Amount</div>
+                <div className="w-4/12">Description</div>
+                <div className="w-2/12">Category</div>
+                <div className="w-2/12 text-right">Amount</div>
               </div>
               <div className="overflow-y-auto max-h-60">
                 {isLoading ? (
@@ -144,10 +133,10 @@ export default function EditReportExpensesModal({
                         htmlFor={`expense-checkbox-${expense.id}`}
                         className="flex items-center justify-between flex-1 ml-3 text-sm cursor-pointer"
                       >
-                        <div className="w-2/12 text-gray-600">{formatDate(expense.expense_date)}</div>
-                        <div className="w-3/12 font-medium text-gray-800">{expense.title}</div>
                         <div className="w-3/12 text-gray-600">{expense.supplier || 'N/A'}</div>
-                        <div className="w-3/12 text-right text-gray-800">{formatCurrency(expense.amount)}</div>
+                        <div className="w-4/12 font-medium text-gray-800">{expense.title}</div>
+                        <div className="w-2/12 text-gray-600">{expense.expense_type}</div>
+                        <div className="w-2/12 text-right text-gray-800">{formatCurrency(expense.amount)}</div>
                       </label>
                     </div>
                   ))

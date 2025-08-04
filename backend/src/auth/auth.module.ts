@@ -7,7 +7,7 @@ import { UserModule } from 'src/user/user.module';
 import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtStrategy } from './strategy/jwt.strategy'; // 1. IMPORT the strategy
+import { JwtStrategy } from './strategy/jwt.strategy';
 
 @Module({
   imports: [
@@ -17,12 +17,12 @@ import { JwtStrategy } from './strategy/jwt.strategy'; // 1. IMPORT the strategy
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
         secret: configService.get<string>('JWT_SECRET'),
-        signOptions: { expiresIn: '1h' },
+        // Token now expires after 3 hours instead of 1
+        signOptions: { expiresIn: '3h' },
       }),
       inject: [ConfigService],
     }),
   ],
-  // 2. ADD the strategy to the providers array
   providers: [AuthService, JwtStrategy],
   controllers: [AuthController],
 })

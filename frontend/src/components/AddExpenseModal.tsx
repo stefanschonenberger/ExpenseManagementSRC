@@ -20,7 +20,7 @@ interface Expense {
   book: boolean;
   book_amount?: number;
   vat_amount: number;
-  receipt_blob_id: string | null; // Ensure this is part of the interface
+  receipt_blob_id: string | null;
 }
 
 interface AddExpenseModalProps {
@@ -52,9 +52,9 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
 
   const [isOverlayOpen, setOverlayOpen] = useState(false);
   const [scanResult, setScanResult] = useState<{ parsedData: any; overlay: any; ocrImageBlobId: string } | null>(null);
-  const [receiptImageSrc, setReceiptImageSrc] = useState(''); // For initial preview in this modal
-  const [receiptMimeType, setReceiptMimeType] = useState<string | null>(null); // To store the fetched mimetype
-  const [ocrOverlayImageSrc, setOcrOverlayImageSrc] = useState(''); // For the OcrOverlayModal
+  const [receiptImageSrc, setReceiptImageSrc] = useState('');
+  const [receiptMimeType, setReceiptMimeType] = useState<string | null>(null);
+  const [ocrOverlayImageSrc, setOcrOverlayImageSrc] = useState('');
 
   const token = useAuthStore((state) => state.token);
   const showToast = useToastStore((state) => state.showToast);
@@ -117,7 +117,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
       setBookAmount(expenseToEdit.book && expenseToEdit.book_amount ? (expenseToEdit.book_amount / 100).toFixed(2) : '');
       loadExistingReceipt();
     } else if (!isEditMode && expenseTypes.length > 0) {
-      setExpenseType(expenseTypes[0]);
+      setExpenseType([...expenseTypes].sort()[0]);
 	    setBook(false);
       setBookAmount('');
       setExpenseDate(getTodayString());
@@ -205,11 +205,9 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
             'jul': '07', 'aug': '08', 'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
         };
 
-        // 1. Check for YYYY-MM-DD format first
         const isoMatch = dateStr.match(/^\d{4}-\d{2}-\d{2}$/);
         if (isoMatch) return dateStr;
 
-        // 2. Try to match "DD Mon YYYY" format
         const monthNameRegex = /(\d{1,2})\s*([A-Za-z]{3})\s*(\d{4})/;
         const monthMatch = dateStr.match(monthNameRegex);
         if (monthMatch) {
@@ -220,7 +218,6 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
             if (month) return `${year}-${month}-${day}`;
         }
 
-        // 3. Fallback to numeric DD/MM/YYYY format
         const numericDateRegex = /(\d{1,2})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{4})/;
         const numericMatch = dateStr.match(numericDateRegex);
         if (numericMatch) {
@@ -335,12 +332,12 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
             <form onSubmit={handleSubmit} className="flex flex-col flex-grow mt-4 space-y-4 overflow-y-auto pr-2">
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="title" className="block text-sm font-medium text-gray-700">Title</label>
-                  <input type="text" id="title" value={title} onChange={(e) => setTitle(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
-                </div>
-                <div>
                   <label htmlFor="supplier" className="block text-sm font-medium text-gray-700">Supplier / Vendor</label>
                   <input type="text" id="supplier" value={supplier} onChange={(e) => setSupplier(e.target.value)} className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                </div>
+                <div>
+                  <label htmlFor="title" className="block text-sm font-medium text-gray-700">Description</label>
+                  <input type="text" id="title" value={title} onChange={(e) => setTitle(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -355,29 +352,12 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
               </div>
               
               <div>
-                <label className="block text-sm font-medium text-gray-700">Attach Receipt</label>
-                <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`flex items-center justify-center w-full px-6 pt-5 pb-6 mt-1 border-2 border-dashed rounded-md transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-gray-300'}`}>
-                  <div className="space-y-1 text-center">
-                    <UploadCloud className="w-12 h-12 mx-auto text-gray-400" />
-                    <div className="flex text-sm text-gray-600">
-                      <label htmlFor="file-upload" className="relative font-medium rounded-md cursor-pointer text-primary hover:text-primary-hover">
-                        <span>Upload a file</span>
-                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={(e) => handleFileChange(e.target.files)} />
-                      </label>
-                      <p className="pl-1">or drag and drop</p>
-                    </div>
-                    {receiptFile ? <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>{receiptFile.name}</p> : 
-                     (expenseToEdit?.receipt_blob_id && <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>Existing Receipt</p>)}
-                  </div>
-                </div>
-              </div>
-              
-               <div>
-                <label htmlFor="expenseType" className="block text-sm font-medium text-gray-700">Expense Type</label>
+                <label htmlFor="expenseType" className="block text-sm font-medium text-gray-700">Category</label>
                 <select id="expenseType" value={expenseType} onChange={(e) => setExpenseType(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary">
-                  {expenseTypes.map(type => (<option key={type} value={type}>{type}</option>))}
+                  {[...expenseTypes].sort().map(type => (<option key={type} value={type}>{type}</option>))}
                 </select>
               </div>
+
               <div className="flex items-center">
                   <input id="vat_applied" name="vat_applied" type="checkbox" checked={vatApplied} onChange={(e) => setVatApplied(e.target.checked)} className="w-4 h-4 text-primary border-gray-300 rounded focus:ring-primary" />
                   <label htmlFor="vat_applied" className="block ml-2 text-sm text-gray-900">VAT Applied</label>
@@ -419,6 +399,24 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
                         <input type="text" id="bookAmount" value={bookAmount} onChange={(e) => setBookAmount(e.target.value.replace(/[^0-9.]/g, ''))} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
                     </div>
                 )}
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700">Attach Receipt</label>
+                <div onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} className={`flex items-center justify-center w-full px-6 pt-5 pb-6 mt-1 border-2 border-dashed rounded-md transition-colors ${isDragging ? 'border-primary bg-blue-50' : 'border-gray-300'}`}>
+                  <div className="space-y-1 text-center">
+                    <UploadCloud className="w-12 h-12 mx-auto text-gray-400" />
+                    <div className="flex text-sm text-gray-600">
+                      <label htmlFor="file-upload" className="relative font-medium rounded-md cursor-pointer text-primary hover:text-primary-hover">
+                        <span>Upload a file</span>
+                        <input id="file-upload" name="file-upload" type="file" className="sr-only" onChange={(e) => handleFileChange(e.target.files)} />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
+                    {receiptFile ? <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>{receiptFile.name}</p> : 
+                     (expenseToEdit?.receipt_blob_id && <p className="flex items-center justify-center text-sm text-gray-500"><Paperclip className="w-4 h-4 mr-1"/>Existing Receipt</p>)}
+                  </div>
+                </div>
+              </div>
 
               {error && <p className="text-sm text-center text-danger">{error}</p>}
               <div className="flex justify-end pt-4 mt-auto space-x-2">
