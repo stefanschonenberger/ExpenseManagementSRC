@@ -130,6 +130,10 @@ export class PdfService {
         
         if (expense.book) {
             summary.bookClaim += expense.book_amount;
+            const difference = expense.amount - expense.book_amount;
+            if (difference > 0) {
+                summary.claim += difference;
+            }
         } else {
             summary.claim += expense.amount;
         }

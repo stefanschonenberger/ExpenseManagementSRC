@@ -337,7 +337,7 @@ export default function AddExpenseModal({ onClose, onExpenseAdded, expenseToEdit
                 </div>
                 <div>
                   <label htmlFor="title" className="block text-sm font-medium text-gray-700">Description</label>
-                  <input type="text" id="title" value={title} onChange={(e) => setTitle(e.target.value)} required className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
+                  <input type="text" id="title" value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-3 py-2 mt-1 border border-gray-300 rounded-md shadow-sm focus:ring-primary focus:border-primary" />
                 </div>
               </div>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

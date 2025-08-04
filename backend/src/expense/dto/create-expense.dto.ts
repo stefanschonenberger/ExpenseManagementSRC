@@ -4,8 +4,8 @@ import { IsString, IsNotEmpty, IsOptional, IsDateString, IsInt, Min, IsBoolean, 
 
 export class CreateExpenseDto {
   @IsString()
-  @IsNotEmpty()
-  title: string;
+  @IsOptional()
+  title?: string;
 
   @IsString()
   @IsOptional()
@@ -52,7 +52,6 @@ export class CreateExpenseDto {
   @IsOptional()
   receipt_blob_id?: string;
 
-  // This new field will carry the ID of the temporary file to be deleted.
   @IsUUID()
   @IsOptional()
   transientOcrBlobId?: string;

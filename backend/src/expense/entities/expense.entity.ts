@@ -30,7 +30,7 @@ export class Expense {
   })
   report: ExpenseReport | null;
 
-  @Column()
+  @Column({ nullable: true })
   title: string;
 
   @Column({ type: 'text', nullable: true })
