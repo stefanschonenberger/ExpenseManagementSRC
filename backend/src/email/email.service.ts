@@ -96,7 +96,7 @@ export class EmailService {
 
   async sendSubmissionNotification(report: ExpenseReport, manager: User) {
     const subject = `Expense Report Submitted for Your Approval: ${report.title}`;
-    const html = `<p>Hello ${manager.full_name},</p><p>${report.user.full_name} has submitted an expense report titled "<b>${report.title}</b>" for your approval.</p><p>Please log in to the Expense Management system to review it.</p>`;
+    const html = `<p>Hello ${manager.full_name},</p><p>${report.user.full_name} has submitted an expense report titled "<b>${report.title}</b>" for your approval.</p><p>Please log in to the Expense Management System to review it.</p>`;
     await this.sendMail([manager.email], subject, html);
   }
 
@@ -119,7 +119,7 @@ export class EmailService {
 
   async sendRejectionNotification(report: ExpenseReport, employee: User, manager: User) {
     const subject = `Expense Report Action Required: ${report.title}`;
-    const html = `<p>Hello ${employee.full_name},</p><p>Your expense report titled "<b>${report.title}</b>" was returned by ${manager.full_name}.</p><p><b>Reason:</b> ${report.rejection_reason}</p><p>Please log in to the Expense Management system to make the necessary changes and resubmit.</p>`;
+    const html = `<p>Hello ${employee.full_name},</p><p>Your expense report titled "<b>${report.title}</b>" was returned by ${manager.full_name}.</p><p><b>Reason:</b> ${report.rejection_reason}</p><p>Please log in to the Expense Management System to make the necessary changes and resubmit.</p>`;
     await this.sendMail([employee.email], subject, html);
   }
 }

@@ -5,11 +5,21 @@ import { UserService } from './user.service';
 import { UserController } from './user.controller';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from './entities/user.entity';
-import { ManagementRelationship } from './entities/management-relationship.entity'; // 1. Import the new entity
+import { ManagementRelationship } from './entities/management-relationship.entity';
+import { Expense } from 'src/expense/entities/expense.entity';
+import { ExpenseReport } from 'src/expense-report/entities/expense-report.entity';
+import { BlobModule } from 'src/blob/blob.module';
 
 @Module({
-  // 2. Add the ManagementRelationship entity to this array
-  imports: [TypeOrmModule.forFeature([User, ManagementRelationship])],
+  imports: [
+    TypeOrmModule.forFeature([
+      User, 
+      ManagementRelationship, 
+      Expense, 
+      ExpenseReport
+    ]),
+    BlobModule,
+  ],
   controllers: [UserController],
   providers: [UserService],
   exports: [UserService],

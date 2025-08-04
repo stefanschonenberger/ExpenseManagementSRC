@@ -1,17 +1,18 @@
-// ==========================================================
-// File: src/user/user.service.ts
-// This is the complete and corrected version of the file.
-// ==========================================================
-import { Injectable, ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
+// backend/src/user/user.service.ts
+
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Raw } from 'typeorm';
+import { Repository, Raw, EntityManager } from 'typeorm';
 import { CreateUserDto } from './dto/create-user.dto';
-import { User, UserRole } from './entities/user.entity';
+import { User } from './entities/user.entity';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { ManagementRelationship } from './entities/management-relationship.entity';
 import * as bcrypt from 'bcrypt';
 import { UnauthorizedException } from '@nestjs/common';
-import { ChangePasswordDto } from './dto/change-password.dto'; // FIX: Add the missing import
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { ExpenseReport } from 'src/expense-report/entities/expense-report.entity';
+import { Expense } from 'src/expense/entities/expense.entity';
+import { BlobService } from 'src/blob/blob.service';
 
 @Injectable()
 export class UserService {
@@ -20,6 +21,12 @@ export class UserService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(ManagementRelationship)
     private readonly managementRepository: Repository<ManagementRelationship>,
+    @InjectRepository(ExpenseReport)
+    private readonly reportRepository: Repository<ExpenseReport>,
+    @InjectRepository(Expense)
+    private readonly expenseRepository: Repository<Expense>,
+    private readonly blobService: BlobService,
+    private readonly entityManager: EntityManager,
   ) {}
 
   async adminResetPassword(userId: string, newPassword: string): Promise<void> {
@@ -51,24 +58,44 @@ export class UserService {
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User> {
     const user = await this.findOne(id);
-
-    // The endpoint this is called from is already protected by the Admin guard.
-    // An admin should be able to manage other admins, so the check is removed.
-
     Object.assign(user, updateUserDto);
     return this.userRepository.save(user);
   }
 
   async remove(id: string): Promise<void> {
-    const user = await this.findOne(id);
-    // Clean up relationships when deleting a user
-    await this.managementRepository.delete({ employee_id: id });
-    await this.managementRepository.delete({ manager_id: id });
-    await this.userRepository.remove(user);
+    await this.entityManager.transaction(async transactionalEntityManager => {
+        const user = await transactionalEntityManager.findOne(User, { where: { id } });
+        if (!user) {
+            throw new NotFoundException(`User with ID ${id} not found.`);
+        }
+
+        // 1. Find all expenses to get blob IDs
+        const expenses = await transactionalEntityManager.find(Expense, { where: { user: { id } } });
+        const blobIdsToDelete = expenses
+            .map(e => e.receipt_blob_id)
+            .filter((id): id is string => id !== null);
+
+        // 2. Delete all associated blobs
+        if (blobIdsToDelete.length > 0) {
+            await Promise.all(blobIdsToDelete.map(blobId => this.blobService.deleteBlob(blobId)));
+        }
+
+        // 3. Delete all expense reports associated with the user
+        await transactionalEntityManager.delete(ExpenseReport, { user: { id } });
+        
+        // 4. Delete all expenses associated with the user
+        await transactionalEntityManager.delete(Expense, { user: { id } });
+
+        // 5. Clean up management relationships
+        await transactionalEntityManager.delete(ManagementRelationship, { employee_id: id });
+        await transactionalEntityManager.delete(ManagementRelationship, { manager_id: id });
+
+        // 6. Finally, delete the user
+        await transactionalEntityManager.remove(user);
+    });
   }
 
   async findOneByEmail(email: string): Promise<User | null> {
-    // Perform a case-insensitive search to handle any existing, non-normalized data.
     return this.userRepository.findOne({
         where: {
             email: Raw(alias => `LOWER(${alias}) = LOWER(:email)`, { email: email.toLowerCase() })
@@ -91,13 +118,9 @@ export class UserService {
     return { isManager: count > 0 };
   }
 
-	/**
-     * Allows a user to change their own password.
-     */
-    async changePassword(userId: string, changePasswordDto: ChangePasswordDto): Promise<void> {
+	async changePassword(userId: string, changePasswordDto: ChangePasswordDto): Promise<void> {
         const user = await this.findOne(userId);
 
-        // 1. Verify the old password is correct
         const isPasswordCorrect = await bcrypt.compare(
             changePasswordDto.oldPassword,
             user.password_hash,
@@ -107,10 +130,8 @@ export class UserService {
             throw new UnauthorizedException('Invalid old password.');
         }
 
-        // 2. Hash the new password before saving
         user.password_hash = await bcrypt.hash(changePasswordDto.newPassword, 10);
 
-        // 3. Save the user with the new password hash
         await this.userRepository.save(user);
     }
 }

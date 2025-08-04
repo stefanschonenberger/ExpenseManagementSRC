@@ -6,7 +6,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
-import { CheckCircle, XCircle, Eye, ArrowLeft, Check } from 'lucide-react';
+import { CheckCircle, XCircle, Eye, ArrowLeft, Check, Loader2 } from 'lucide-react';
 import RejectReportModal from '@/components/RejectReportModal'; 
 import { formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
@@ -42,6 +42,7 @@ export default function ApprovalDetailPage() {
   const { id: reportId } = params;
   const [report, setReport] = useState<ReportDetails | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isApproving, setIsApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isRejectModalOpen, setRejectModalOpen] = useState(false);
   const token = useAuthStore((state) => state.token);
@@ -74,6 +75,7 @@ export default function ApprovalDetailPage() {
 
   const handleApprove = async () => {
     if (!token || !reportId) return;
+    setIsApproving(true);
     try {
       await api.post(`/expense-report/${reportId}/approve`, {}, {
         headers: { Authorization: `Bearer ${token}` },
@@ -83,6 +85,8 @@ export default function ApprovalDetailPage() {
     } catch (err) {
       showToast('Failed to approve report.', 'error');
       console.error(err);
+    } finally {
+      setIsApproving(false);
     }
   };
 
@@ -143,8 +147,11 @@ export default function ApprovalDetailPage() {
             </div>
             {report.status === 'SUBMITTED' && (
                 <div className="flex space-x-2">
-                    <button onClick={() => setRejectModalOpen(true)} className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-danger rounded-md hover:bg-danger-hover"><XCircle className="w-5 h-5 mr-2" />Reject</button>
-                    <button onClick={handleApprove} className="inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md bg-success hover:bg-success-hover"><CheckCircle className="w-5 h-5 mr-2" />Approve</button>
+                    <button onClick={() => setRejectModalOpen(true)} disabled={isApproving} className="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-danger rounded-md hover:bg-danger-hover disabled:bg-gray-400"><XCircle className="w-5 h-5 mr-2" />Reject</button>
+                    <button onClick={handleApprove} disabled={isApproving} className="inline-flex items-center px-4 py-2 text-sm font-medium text-white rounded-md bg-success hover:bg-success-hover disabled:bg-gray-400">
+                        {isApproving ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <CheckCircle className="w-5 h-5 mr-2" />}
+                        {isApproving ? 'Approving...' : 'Approve'}
+                    </button>
                 </div>
             )}
         </div>
