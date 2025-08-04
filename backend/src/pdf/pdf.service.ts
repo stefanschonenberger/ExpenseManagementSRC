@@ -6,6 +6,9 @@ import { PDFDocument, rgb, StandardFonts, PageSizes, PDFFont } from 'pdf-lib';
 import { BlobService } from 'src/blob/blob.service';
 import { OcrService } from 'src/ocr/ocr.service';
 import { User } from 'src/user/entities/user.entity';
+import { AdminSettings } from 'src/admin/entities/admin-settings.entity';
+import * as fs from 'fs/promises';
+import * as path from 'path';
 
 @Injectable()
 export class PdfService {
@@ -16,7 +19,7 @@ export class PdfService {
     private readonly ocrService: OcrService,
   ) {}
 
-  async generatePdf(report: ExpenseReport): Promise<Buffer> {
+  async generatePdf(report: ExpenseReport, settings: AdminSettings): Promise<Buffer> {
     const pdfDoc = await PDFDocument.create();
     let page = pdfDoc.addPage(PageSizes.A4);
     const { width, height } = page.getSize();
@@ -29,13 +32,33 @@ export class PdfService {
     const fontColor = rgb(0.2, 0.2, 0.2);
     const whiteColor = rgb(1, 1, 1);
 
-    const margin = 50;
+    const margin = 25;
     let y = height - margin;
+    const headerY = y;
+
+    // --- Add Logo ---
+    try {
+        const logoPath = path.join(process.cwd(), 'src', 'assets', 'opia-tech.png');
+        const logoImageBytes = await fs.readFile(logoPath);
+        const logoImage = await pdfDoc.embedPng(logoImageBytes);
+        
+        const logoDims = logoImage.scale(0.175); 
+
+        page.drawImage(logoImage, {
+            x: width - margin - logoDims.width,
+            y: headerY - logoDims.height + (boldFont.heightAtSize(24) * 0.2), // Align top of logo with top of heading
+            width: logoDims.width,
+            height: logoDims.height,
+        });
+    } catch (error) {
+        this.logger.error('Could not load or embed the logo image.', error);
+    }
+
 
     // --- Helper Functions ---
     const formatCurrency = (amountInCents: number) => {
-        if (amountInCents === null || amountInCents === undefined) return '-';
-        return `R ${(amountInCents / 100).toFixed(2)}`;
+        if (amountInCents === null || amountInCents === undefined || amountInCents === 0) return '-';
+        return `R ${(amountInCents / 100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
     };
 
     const formatDate = (dateString: string | Date): string => {
@@ -69,8 +92,9 @@ export class PdfService {
     };
 
     // --- Header ---
-    page.drawText('Expense Report', { x: margin, y, font: boldFont, size: 24, color: primaryColor });
-    y -= 40;
+    const headingY = headerY - 15; // Move heading down to align with logo
+    page.drawText('Expense Report', { x: margin, y: headingY, font: boldFont, size: 24, color: primaryColor });
+    y = headingY - 40; // Set next y relative to the new heading position
 
     // --- Report Details ---
     const details = [
@@ -90,6 +114,85 @@ export class PdfService {
     
     y -= 30;
 
+    // --- Data Aggregation for Summary ---
+    const expenseSummary = new Map<string, { claim: number, bookClaim: number }>();
+    const expenseTypesFromSettings = settings.expense_types || [];
+    expenseTypesFromSettings.forEach(type => {
+        expenseSummary.set(type, { claim: 0, bookClaim: 0 });
+    });
+
+    report.expenses.forEach(expense => {
+        if (!expenseSummary.has(expense.expense_type)) {
+            expenseSummary.set(expense.expense_type, { claim: 0, bookClaim: 0 });
+        }
+        const summary = expenseSummary.get(expense.expense_type)!;
+        
+        if (expense.book) {
+            summary.bookClaim += expense.book_amount;
+        } else {
+            summary.claim += expense.amount;
+        }
+    });
+
+    // --- Draw Summary Section ---
+    const summaryRightAlignX = width - margin;
+
+    page.drawText('Claim Total', { x: margin, y, font: boldFont, size: 12, color: fontColor });
+    let totalAmountText = formatCurrency(report.total_amount);
+    let textWidth = boldFont.widthOfTextAtSize(totalAmountText, 12);
+    page.drawText(totalAmountText, { x: summaryRightAlignX - textWidth, y, font: boldFont, size: 12, color: fontColor });
+    y -= 20;
+
+    page.drawText('VAT', { x: margin, y, font: boldFont, size: 12, color: fontColor });
+    let totalVatText = formatCurrency(report.total_vat_amount);
+    textWidth = boldFont.widthOfTextAtSize(totalVatText, 12);
+    page.drawText(totalVatText, { x: summaryRightAlignX - textWidth, y, font: boldFont, size: 12, color: fontColor });
+    y -= 15;
+
+    page.drawLine({ start: { x: margin, y: y + 5 }, end: { x: width - margin, y: y + 5 }, thickness: 0.5, color: rgb(0,0,0) });
+    y -= 15;
+
+    const summaryTableWidth = width - margin * 2;
+    const claimColX = margin + summaryTableWidth * 0.6;
+    const bookClaimColX = margin + summaryTableWidth * 0.8;
+
+
+    page.drawText('Claim', { x: claimColX, y, font: boldFont, size: 10, color: fontColor });
+    page.drawText('Book Claim', { x: bookClaimColX, y, font: boldFont, size: 10, color: fontColor });
+    y -= 20;
+
+    const sortedExpenseTypes = [...expenseTypesFromSettings].sort();
+    for (const type of sortedExpenseTypes) {
+        const amounts = expenseSummary.get(type);
+        if (!amounts || (amounts.claim === 0 && amounts.bookClaim === 0)) {
+            continue;
+        }
+        
+        if (y < margin + 20) {
+            page = pdfDoc.addPage(PageSizes.A4);
+            y = height - margin;
+        }
+
+        page.drawText(type, { x: margin, y, font, size: 10, color: fontColor });
+        
+        if (amounts.claim > 0) {
+            const claimText = formatCurrency(amounts.claim);
+            page.drawText(claimText, { x: claimColX, y, font, size: 10, color: fontColor });
+        } else {
+            page.drawText('-', { x: claimColX, y, font, size: 10, color: fontColor });
+        }
+        
+        if (amounts.bookClaim > 0) {
+            const bookClaimText = formatCurrency(amounts.bookClaim);
+            page.drawText(bookClaimText, { x: bookClaimColX, y, font, size: 10, color: fontColor });
+        } else {
+             page.drawText('-', { x: bookClaimColX, y, font, size: 10, color: fontColor });
+        }
+        y -= 15;
+    }
+    
+    y -= 30;
+
     // --- Expenses Table ---
     const table = {
       x: margin,
@@ -98,12 +201,12 @@ export class PdfService {
       header: { height: 25, color: primaryColor, fontColor: whiteColor },
       row: { height: 20, evenColor: whiteColor, oddColor: grayColor },
       columns: [
-        { header: 'Date', key: 'date', width: 60, align: 'left' },
-        { header: 'Title', key: 'title', width: 110, align: 'left' },
-        { header: 'Supplier', key: 'supplier', width: 90, align: 'left' },
-        { header: 'Book Amt', key: 'book_amount', width: 70, align: 'right' },
-        { header: 'VAT', key: 'vat', width: 60, align: 'right' },
-        { header: 'Amount', key: 'amount', width: 80, align: 'right' },
+        { header: 'Date', key: 'date', width: (width - margin * 2) * 0.1, align: 'left' },
+        { header: 'Title', key: 'title', width: (width - margin * 2) * 0.25, align: 'left' },
+        { header: 'Supplier', key: 'supplier', width: (width - margin * 2) * 0.2, align: 'left' },
+        { header: 'Book Amt', key: 'book_amount', width: (width - margin * 2) * 0.15, align: 'right' },
+        { header: 'VAT', key: 'vat', width: (width - margin * 2) * 0.15, align: 'right' },
+        { header: 'Amount', key: 'amount', width: (width - margin * 2) * 0.15, align: 'right' },
       ],
     };
 
@@ -182,7 +285,7 @@ export class PdfService {
     
     page.drawText('Subtotal:', { x: col1StartX, y: totalsY - 15, font: font, size: 10, color: fontColor });
     let valueText = formatCurrency(totalBookAmount);
-    let textWidth = font.widthOfTextAtSize(valueText, 10);
+    textWidth = font.widthOfTextAtSize(valueText, 10);
     page.drawText(valueText, { x: col1RightEdge - textWidth, y: totalsY - 15, font: font, size: 10, color: fontColor });
 
     // --- Column 2: Non-Book Totals ---
@@ -226,7 +329,7 @@ export class PdfService {
             page = pdfDoc.addPage(PageSizes.A4);
             const image = await (imageType === 'jpeg' ? pdfDoc.embedJpg(imageBuffer) : pdfDoc.embedPng(imageBuffer));
             const { width: pageWidth, height: pageHeight } = page.getSize();
-            const pageMargin = 50;
+            const pageMargin = 25;
             
             const titleY = pageHeight - pageMargin;
             page.drawText(`Receipt for: ${expense.title} ${pageNumInfo}`, { x: pageMargin, y: titleY, font: boldFont, size: 14, color: fontColor });

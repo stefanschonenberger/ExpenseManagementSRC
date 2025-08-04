@@ -271,10 +271,10 @@ export class ExpenseReportService {
 
     try {
       this.logger.log(`Generating PDF for approved report ${report.id}`);
-      const pdfBuffer = await this.pdfService.generatePdf(report);
+      const settings = await this.adminService.getSettings();
+      const pdfBuffer = await this.pdfService.generatePdf(savedReport, settings);
       
       this.logger.log(`Fetching settings to get finance email.`);
-      const settings = await this.adminService.getSettings();
       
       this.logger.log(`Sending approval email with PDF to ${report.user.email} and finance (${settings.finance_email || 'not set'}).`);
       await this.emailService.sendApprovalEmailWithPdf(savedReport, savedReport.user, settings.finance_email, pdfBuffer);
@@ -328,6 +328,7 @@ export class ExpenseReportService {
       throw new ForbiddenException('PDFs can only be generated for approved reports.');
     }
     
-    return this.pdfService.generatePdf(report);
+    const settings = await this.adminService.getSettings();
+    return this.pdfService.generatePdf(report, settings);
   }
 }
