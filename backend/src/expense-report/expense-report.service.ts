@@ -316,12 +316,15 @@ export class ExpenseReportService {
   async generateReportPdf(reportId: string, user: User): Promise<Buffer> {
     this.logger.log(`PDF generation requested for report ${reportId} by user ${user.email}`);
     const report = await this.reportRepository.findOne({
-        where: { id: reportId, user: { id: user.id } },
+        where: [
+            { id: reportId, user: { id: user.id } }, // Case 1: Requester is the owner
+            { id: reportId, approver: { id: user.id } } // Case 2: Requester is the approver
+        ],
         relations: ['expenses', 'user', 'approver'],
     });
 
     if (!report) {
-        throw new NotFoundException(`Report with ID "${reportId}" not found.`);
+        throw new NotFoundException(`Report with ID "${reportId}" not found or you are not authorized to view it.`);
     }
 
     if (report.status === ReportStatus.REJECTED) {

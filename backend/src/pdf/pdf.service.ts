@@ -9,6 +9,7 @@ import { User } from 'src/user/entities/user.entity';
 import { AdminSettings } from 'src/admin/entities/admin-settings.entity';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as sharp from 'sharp';
 
 @Injectable()
 export class PdfService {
@@ -38,7 +39,7 @@ export class PdfService {
 
     // --- Add Logo ---
     try {
-        const logoPath = path.join(process.cwd(), 'src', 'assets', 'opia-tech.png');
+        const logoPath = path.join(process.cwd(), 'dist', 'assets', 'opia-tech.png');
         const logoImageBytes = await fs.readFile(logoPath);
         const logoImage = await pdfDoc.embedPng(logoImageBytes);
         
@@ -92,7 +93,7 @@ export class PdfService {
     };
 
     // --- Header ---
-    const headingY = headerY - 15;
+    const headingY = headerY - 6;
     page.drawText('Expense Report', { x: margin, y: headingY, font: boldFont, size: 24, color: primaryColor });
     y = headingY - 40;
 
@@ -326,8 +327,16 @@ export class PdfService {
         try {
           const blob = await this.blobService.getBlobById(expense.receipt_blob_id);
           const processAndDrawImage = async (imageBuffer: Buffer, imageType: 'png' | 'jpeg', pageNumInfo: string) => {
+            
+            // --- Image Compression with Sharp ---
+            const compressedImageBuffer = await sharp(imageBuffer)
+                .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
+                .jpeg({ quality: 75, progressive: true })
+                .toBuffer();
+            
             page = pdfDoc.addPage(PageSizes.A4);
-            const image = await (imageType === 'jpeg' ? pdfDoc.embedJpg(imageBuffer) : pdfDoc.embedPng(imageBuffer));
+            const image = await pdfDoc.embedJpg(compressedImageBuffer);
+            
             const { width: pageWidth, height: pageHeight } = page.getSize();
             const pageMargin = 25;
             
@@ -350,7 +359,7 @@ export class PdfService {
           };
 
           if (blob.mimetype === 'image/jpeg' || blob.mimetype === 'image/png') {
-            await processAndDrawImage(blob.data, blob.mimetype === 'image/jpeg' ? 'jpeg' : 'png', '');
+            await processAndDrawImage(blob.data, 'jpeg', '');
           } else if (blob.mimetype === 'application/pdf') {
             const pageCount = await this.ocrService.getPdfPageCount(blob.data);
             for (let i = 1; i <= pageCount; i++) {
@@ -403,7 +412,7 @@ export class PdfService {
         });
     }
 
-    const pdfBytes = await pdfDoc.save();
+    const pdfBytes = await pdfDoc.save({ useObjectStreams: true });
     return Buffer.from(pdfBytes);
   }
 }

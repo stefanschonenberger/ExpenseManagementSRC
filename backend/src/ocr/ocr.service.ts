@@ -56,22 +56,27 @@ export class OcrService {
   public async convertPdfPageToPng(pdfBuffer: Buffer, pageNumber: number): Promise<Buffer> {
     const tempDir = os.tmpdir();
     const inputPdfPath = path.join(tempDir, `input_${Date.now()}_p${pageNumber}.pdf`);
-    const outputPngPath = path.join(tempDir, `output_${Date.now()}_p${pageNumber}.png`);
+    // OPTIMIZATION: Change output to JPEG for better compression
+    const outputImagePath = path.join(tempDir, `output_${Date.now()}_p${pageNumber}.jpeg`);
     const gsExecutable = this.getGhostscriptExecutable();
 
     try {
       await fs.writeFile(inputPdfPath, pdfBuffer);
       this.logger.debug(`Temporary PDF written to: ${inputPdfPath}`);
 
+      // OPTIMIZATION: Switched to jpeg device, reduced DPI, and added quality/rendering hints.
       const gsArgs = [
-        '-sDEVICE=png16m',
-        '-r300',
+        '-sDEVICE=jpeg',         // Use JPEG for smaller file sizes
+        '-dJPEGQ=85',            // Set JPEG quality to 85%
+        '-r150',                 // Reduce resolution to 150 DPI (still great for OCR)
+        '-dTextAlphaBits=4',     // Enable text anti-aliasing for better OCR accuracy
+        '-dGraphicsAlphaBits=4', // Enable graphics anti-aliasing
         '-dQUIET',
         '-dBATCH',
         '-dNOPAUSE',
         `-dFirstPage=${pageNumber}`,
         `-dLastPage=${pageNumber}`,
-        `-sOutputFile=${outputPngPath}`,
+        `-sOutputFile=${outputImagePath}`,
         inputPdfPath,
       ];
 
@@ -79,16 +84,16 @@ export class OcrService {
 
       await execFileAsync(gsExecutable, gsArgs);
 
-      const imageBuffer = await fs.readFile(outputPngPath);
-      this.logger.debug(`Generated PNG read from: ${outputPngPath}`);
+      const imageBuffer = await fs.readFile(outputImagePath);
+      this.logger.debug(`Generated JPEG read from: ${outputImagePath}`);
       return imageBuffer;
 
     } catch (error) {
-      this.logger.error(`Error during PDF to PNG conversion for page ${pageNumber}: ${error.message}`, error.stack);
+      this.logger.error(`Error during PDF to Image conversion for page ${pageNumber}: ${error.message}`, error.stack);
       throw new Error(`Failed to convert page ${pageNumber} of PDF to image: ${error.message}`);
     } finally {
         await fs.unlink(inputPdfPath).catch(err => this.logger.warn(`Failed to delete temp input file: ${err.message}`));
-        await fs.unlink(outputPngPath).catch(err => this.logger.warn(`Failed to delete temp output file: ${err.message}`));
+        await fs.unlink(outputImagePath).catch(err => this.logger.warn(`Failed to delete temp output file: ${err.message}`));
     }
   }
 
@@ -101,8 +106,9 @@ export class OcrService {
       try {
         this.logger.log('Converting PDF to image for OCR...');
         imageBufferForOcr = await this.convertPdfPageToPng(fileBuffer, 1); 
-        imageMimeTypeForOcr = 'image/png';
-        originalFilenameForOcr = filename.replace(/\.pdf$/i, '.png'); 
+        // OPTIMIZATION: Mimetype is now jpeg
+        imageMimeTypeForOcr = 'image/jpeg';
+        originalFilenameForOcr = filename.replace(/\.pdf$/i, '.jpeg'); 
       } catch (pdfError) {
         this.logger.error(`Failed to convert PDF for OCR: ${pdfError.message}`);
         throw new BadRequestException('Failed to convert PDF for OCR.');

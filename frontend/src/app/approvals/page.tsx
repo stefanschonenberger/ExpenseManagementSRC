@@ -6,8 +6,9 @@ import { useEffect, useState, useCallback } from 'react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import Link from 'next/link';
-import { Eye } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils'; // Import the utility
+import { Eye, Download, Loader2 } from 'lucide-react';
+import { formatCurrency } from '@/lib/utils';
+import { useToastStore } from '@/lib/toastStore';
 
 interface PendingReport {
   id: string;
@@ -23,7 +24,9 @@ export default function ApprovalsPage() {
   const [reports, setReports] = useState<PendingReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [generatingPdfId, setGeneratingPdfId] = useState<string | null>(null);
   const token = useAuthStore((state) => state.token);
+  const showToast = useToastStore((state) => state.showToast);
 
   const fetchPendingReports = useCallback(async () => {
     if (!token) {
@@ -47,6 +50,31 @@ export default function ApprovalsPage() {
   useEffect(() => {
     fetchPendingReports();
   }, [fetchPendingReports]);
+
+  const handleDownloadReport = async (reportId: string) => {
+    setGeneratingPdfId(reportId);
+    try {
+      showToast('Generating your PDF... please wait.', 'info');
+      const response = await api.get(`/expense-report/${reportId}/pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'blob',
+      });
+
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `Opiatech-Report-${reportId}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.parentNode?.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      showToast("Failed to download the report PDF.", "error");
+      console.error(err);
+    } finally {
+        setGeneratingPdfId(null);
+    }
+  };
 
   if (loading) return <p>Loading pending approvals...</p>;
   if (error) return <p className="text-danger">{error}</p>;
@@ -80,10 +108,22 @@ export default function ApprovalsPage() {
                           <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{report.user.full_name}</td>
                           <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{new Date(report.submitted_at).toLocaleDateString()}</td>
                           <td className="px-6 py-4 text-sm text-right text-gray-500 whitespace-nowrap">{formatCurrency(report.total_amount)}</td>
-                          <td className="px-6 py-4 text-sm text-right whitespace-nowrap">
+                          <td className="px-6 py-4 space-x-4 text-sm text-right whitespace-nowrap">
                             <Link href={`/approvals/${report.id}`} className="text-primary hover:text-primary-hover" title="View Report">
                                 <Eye className="inline-block w-5 h-5" />
                             </Link>
+                             <button 
+                                onClick={() => handleDownloadReport(report.id)} 
+                                className="text-success hover:text-green-700 disabled:text-gray-400" 
+                                title="Download PDF"
+                                disabled={generatingPdfId === report.id}
+                            >
+                                {generatingPdfId === report.id ? (
+                                    <Loader2 className="inline-block w-5 h-5 animate-spin" />
+                                ) : (
+                                    <Download className="inline-block w-5 h-5" />
+                                )}
+                            </button>
                           </td>
                       </tr>
                   ))
