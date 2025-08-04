@@ -1,8 +1,8 @@
 // backend/src/pdf/pdf.service.ts
 
 import { Injectable, Logger } from '@nestjs/common';
-import { ExpenseReport } from 'src/expense-report/entities/expense-report.entity';
-import { PDFDocument, rgb, StandardFonts, PageSizes, PDFFont } from 'pdf-lib';
+import { ExpenseReport, ReportStatus } from 'src/expense-report/entities/expense-report.entity';
+import { PDFDocument, rgb, StandardFonts, PageSizes, PDFFont, degrees } from 'pdf-lib';
 import { BlobService } from 'src/blob/blob.service';
 import { OcrService } from 'src/ocr/ocr.service';
 import { User } from 'src/user/entities/user.entity';
@@ -46,7 +46,7 @@ export class PdfService {
 
         page.drawImage(logoImage, {
             x: width - margin - logoDims.width,
-            y: headerY - logoDims.height + (boldFont.heightAtSize(24) * 0.2), // Align top of logo with top of heading
+            y: headerY - logoDims.height + (boldFont.heightAtSize(24) * 0.2),
             width: logoDims.width,
             height: logoDims.height,
         });
@@ -65,7 +65,7 @@ export class PdfService {
         if (!dateString) return 'N/A';
         const date = new Date(dateString);
         const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0'); // Months are 0-based
+        const month = String(date.getMonth() + 1).padStart(2, '0');
         const year = date.getFullYear();
         return `${day}/${month}/${year}`;
     };
@@ -82,19 +82,19 @@ export class PdfService {
         const textWidth = font.widthOfTextAtSize(text, size);
         let textX;
         if (col.align === 'right') {
-            textX = currentX + col.width - textWidth - 5; // 5 units padding from right
+            textX = currentX + col.width - textWidth - 5;
         } else if (col.align === 'center') {
             textX = currentX + (col.width - textWidth) / 2;
         } else {
-            textX = currentX + 5; // 5 units padding from left
+            textX = currentX + 5;
         }
         page.drawText(text, { x: textX, y, font, size, color });
     };
 
     // --- Header ---
-    const headingY = headerY - 15; // Move heading down to align with logo
+    const headingY = headerY - 15;
     page.drawText('Expense Report', { x: margin, y: headingY, font: boldFont, size: 24, color: primaryColor });
-    y = headingY - 40; // Set next y relative to the new heading position
+    y = headingY - 40;
 
     // --- Report Details ---
     const details = [
@@ -363,9 +363,31 @@ export class PdfService {
         }
       }
     }
+    
+    const pages = pdfDoc.getPages();
+
+    // --- Add Watermark if needed ---
+    if (report.status === ReportStatus.DRAFT || report.status === ReportStatus.SUBMITTED) {
+        const text = 'DRAFT';
+        const fontSize = 120;
+        const textWidth = boldFont.widthOfTextAtSize(text, fontSize);
+        const textHeight = boldFont.heightAtSize(fontSize);
+
+        for (const page of pages) {
+            const { width, height } = page.getSize();
+            page.drawText(text, {
+                x: width / 2 - textWidth / 2,
+                y: height / 2 + textHeight / 4,
+                font: boldFont,
+                size: fontSize,
+                color: rgb(0.8, 0.8, 0.8),
+                opacity: 0.2,
+                rotate: degrees(-45),
+            });
+        }
+    }
 
     // --- Page Numbering ---
-    const pages = pdfDoc.getPages();
     for (let i = 0; i < pages.length; i++) {
         const currentPage = pages[i];
         const { width: pageWidth, height: pageHeight } = currentPage.getSize();

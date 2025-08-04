@@ -324,8 +324,8 @@ export class ExpenseReportService {
         throw new NotFoundException(`Report with ID "${reportId}" not found.`);
     }
 
-    if (report.status !== ReportStatus.APPROVED) {
-      throw new ForbiddenException('PDFs can only be generated for approved reports.');
+    if (report.status === ReportStatus.REJECTED) {
+      throw new ForbiddenException('PDFs cannot be generated for rejected reports.');
     }
     
     const settings = await this.adminService.getSettings();

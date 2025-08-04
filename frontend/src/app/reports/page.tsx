@@ -146,7 +146,7 @@ export default function ReportsPage() {
                       <Trash2 className="w-5 h-5" />
                     </button>
                   )}
-                  {report.status === 'APPROVED' && (
+                  {(report.status === 'APPROVED' || report.status === 'DRAFT' || report.status === 'SUBMITTED') && (
                     <button 
                         onClick={() => handleDownloadReport(report.id)} 
                         className="text-success hover:text-green-700 disabled:text-gray-400" 
