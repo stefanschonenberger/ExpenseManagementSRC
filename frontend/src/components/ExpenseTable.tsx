@@ -59,7 +59,7 @@ export default function ExpenseTable({ expenses, onEdit, onDelete, actionsEnable
   };
 
   const sortedExpenses = useMemo(() => {
-    return [...expenses].sort((a, b) => new Date(a.expense_date).getTime() - new Date(b.expense_date).getTime());
+    return [...expenses].sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime());
   }, [expenses]);
 
   return (
@@ -67,12 +67,14 @@ export default function ExpenseTable({ expenses, onEdit, onDelete, actionsEnable
       <table className="min-w-full bg-white">
         <thead className="bg-gray-50">
           <tr>
+            <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Expense Date</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Supplier</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Description</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Category</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">Book Amount</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">VAT</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-right text-gray-500 uppercase">Total</th>
+            <th className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase">Date Captured</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Receipt</th>
             <th className="px-6 py-3 text-xs font-medium tracking-wider text-center text-gray-500 uppercase">Actions</th>
           </tr>
@@ -80,12 +82,14 @@ export default function ExpenseTable({ expenses, onEdit, onDelete, actionsEnable
         <tbody className="bg-white divide-y divide-gray-200">
           {sortedExpenses.map((expense) => (
             <tr key={expense.id}>
+              <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatDate(expense.expense_date)}</td>
               <td className="px-6 py-4 whitespace-nowrap">{expense.supplier || 'N/A'}</td>
               <td className="px-6 py-4 whitespace-nowrap">{expense.title}</td>
               <td className="px-6 py-4 whitespace-nowrap">{expense.expense_type}</td>
               <td className="px-6 py-4 text-right whitespace-nowrap">{expense.book ? formatCurrency(expense.book_amount) : '-'}</td>
               <td className="px-6 py-4 text-right whitespace-nowrap">{formatCurrency(expense.vat_amount)}</td>
               <td className="px-6 py-4 text-right whitespace-nowrap">{formatCurrency(expense.amount)}</td>
+              <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">{formatDate(expense.created_at)}</td>
               <td className="px-6 py-4 text-center whitespace-nowrap">
                 {expense.receipt_blob_id && (
                   <button onClick={() => handlePreview(expense)} title="Preview Receipt">

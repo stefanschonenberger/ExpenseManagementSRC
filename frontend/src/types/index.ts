@@ -17,6 +17,7 @@ export interface Expense {
   book: boolean;
   book_amount: number;
   description?: string; // Optional property
+  created_at: string;
 }
 
 // A minimal version for creating reports, if needed elsewhere

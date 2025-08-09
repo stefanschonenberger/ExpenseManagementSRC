@@ -51,9 +51,7 @@ export default function ExpensesPage() {
         'Approved': 'COMPLETED',
     };
     const targetStatus = statusMap[activeTab];
-    return allExpenses
-      .filter(exp => exp.status === targetStatus)
-      .sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime());
+    return allExpenses.filter(exp => exp.status === targetStatus);
   }, [allExpenses, activeTab]);
   
   const handleModalClose = () => {

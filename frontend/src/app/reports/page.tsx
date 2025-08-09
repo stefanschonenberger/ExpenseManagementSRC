@@ -32,8 +32,8 @@ export default function ReportsPage() {
     try {
       setLoading(true);
       const response = await api.get('/expense-report', { headers: { Authorization: `Bearer ${token}` } });
-      // Sort reports by creation date, oldest first
-      const sortedReports = response.data.sort((a: Report, b: Report) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+      // Sort reports by creation date, newest first
+      const sortedReports = response.data.sort((a: Report, b: Report) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
       setReports(sortedReports);
     } catch (err) {
       setError('Failed to fetch reports.');
