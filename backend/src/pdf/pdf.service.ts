@@ -10,6 +10,14 @@ import { AdminSettings } from 'src/admin/entities/admin-settings.entity';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as sharp from 'sharp';
+import { Expense } from 'src/expense/entities/expense.entity';
+
+interface ReceiptImage {
+  expense: Expense;
+  imageBuffer: Buffer;
+  imageType: 'png' | 'jpeg';
+  pageNumInfo: string;
+}
 
 @Injectable()
 export class PdfService {
@@ -328,54 +336,120 @@ export class PdfService {
     y -= 45;
 
     // --- Receipts Section ---
+    const receipts: ReceiptImage[] = [];
     for (const expense of sortedExpenses) {
-      if (expense.receipt_blob_id) {
-        try {
-          const blob = await this.blobService.getBlobById(expense.receipt_blob_id);
-          const processAndDrawImage = async (imageBuffer: Buffer, imageType: 'png' | 'jpeg', pageNumInfo: string) => {
-            
-            const compressedImageBuffer = await sharp(imageBuffer)
-                .resize(1024, 1024, { fit: 'inside', withoutEnlargement: true })
-                .jpeg({ quality: 75, progressive: true })
-                .toBuffer();
-            
-            page = pdfDoc.addPage(PageSizes.A4);
-            const image = await pdfDoc.embedJpg(compressedImageBuffer);
-            
-            const { width: pageWidth, height: pageHeight } = page.getSize();
-            const pageMargin = 25;
-            
-            const titleY = pageHeight - pageMargin;
-            page.drawText(`Receipt for: ${expense.title} ${pageNumInfo}`, { x: pageMargin, y: titleY, font: boldFont, size: 14, color: fontColor });
+        if (expense.receipt_blob_id) {
+            try {
+                const blob = await this.blobService.getBlobById(expense.receipt_blob_id);
+                if (blob.mimetype === 'image/jpeg' || blob.mimetype === 'image/png') {
+                    // Preserve original format when possible for better quality
+                    const imageType = blob.mimetype === 'image/png' ? 'png' : 'jpeg';
+                    receipts.push({
+                        expense,
+                        imageBuffer: blob.data,
+                        imageType,
+                        pageNumInfo: ''
+                    });
+                } else if (blob.mimetype === 'application/pdf') {
+                    const pageCount = await this.ocrService.getPdfPageCount(blob.data);
+                    for (let i = 1; i <= pageCount; i++) {
+                        const imageBuffer = await this.ocrService.convertPdfPageToPng(blob.data, i);
+                        receipts.push({
+                            expense,
+                            imageBuffer,
+                            imageType: 'png',
+                            pageNumInfo: `(Page ${i}/${pageCount})`
+                        });
+                    }
+                }
+            } catch (error) {
+                this.logger.error(`Could not load receipt for expense ${expense.id}:`, error);
+            }
+        }
+    }
 
-            const titleHeight = 30;
-            const usableWidth = pageWidth - pageMargin * 2;
-            const usableHeight = pageHeight - pageMargin * 2 - titleHeight;
-            const scale = Math.min(usableWidth / image.width, usableHeight / image.height, 1);
-            const imgWidth = image.width * scale;
-            const imgHeight = image.height * scale;
+    if (receipts.length > 0) {
+        let receiptPage = pdfDoc.addPage(PageSizes.A4);
+        const { width: pageWidth, height: pageHeight } = receiptPage.getSize();
+        const pageMargin = 25;
+        const gutter = 10;
+        const receiptWidth = Math.round((pageWidth - 2 * pageMargin - gutter) / 2);
+        const receiptHeight = Math.round((pageHeight - 2 * pageMargin - gutter) / 2);
+        let receiptCount = 0;
 
-            page.drawImage(image, {
-              x: (pageWidth - imgWidth) / 2,
-              y: titleY - titleHeight - imgHeight,
+        for (const receipt of receipts) {
+            const { expense, imageBuffer, imageType, pageNumInfo } = receipt;
+
+            // Improve image quality by using higher resolution and better compression
+            const maxWidth = receiptWidth * 2; // Double the resolution for better quality
+            const maxHeight = receiptHeight * 2;
+            
+            let compressedImageBuffer: Buffer;
+            let image;
+            
+            if (imageType === 'png') {
+                // Process PNG images with lossless compression
+                compressedImageBuffer = await sharp(imageBuffer)
+                    .sharpen() // Enhance sharpness
+                    .resize(maxWidth, maxHeight, { 
+                        fit: 'inside', 
+                        withoutEnlargement: true,
+                        kernel: sharp.kernel.lanczos3
+                    })
+                    .png({ 
+                        quality: 95,
+                        compressionLevel: 6,
+                        adaptiveFiltering: true,
+                        palette: false // Use full color depth
+                    })
+                    .toBuffer();
+                image = await pdfDoc.embedPng(compressedImageBuffer);
+            } else {
+                // Process JPEG images with high quality
+                compressedImageBuffer = await sharp(imageBuffer)
+                    .sharpen() // Enhance sharpness
+                    .resize(maxWidth, maxHeight, { 
+                        fit: 'inside', 
+                        withoutEnlargement: true,
+                        kernel: sharp.kernel.lanczos3
+                    })
+                    .jpeg({ 
+                        quality: 95,
+                        progressive: false,
+                        mozjpeg: true,
+                        chromaSubsampling: '4:4:4' // Disable chroma subsampling for better quality
+                    })
+                    .toBuffer();
+                image = await pdfDoc.embedJpg(compressedImageBuffer);
+            }
+
+            if (receiptCount % 4 === 0 && receiptCount > 0) {
+                receiptPage = pdfDoc.addPage(PageSizes.A4);
+            }
+
+            const rowIndex = Math.floor((receiptCount % 4) / 2);
+            const colIndex = (receiptCount % 4) % 2;
+
+            const x = pageMargin + colIndex * (receiptWidth + gutter);
+            const y = pageHeight - pageMargin - (rowIndex + 1) * receiptHeight - rowIndex * gutter;
+
+            receiptPage.drawText(`Receipt for: ${expense.title} ${pageNumInfo}`, { x, y: y + receiptHeight - 15, font: boldFont, size: 8, color: fontColor });
+
+            // Calculate scale to fit the display area while maintaining aspect ratio
+            const availableWidth = receiptWidth;
+            const availableHeight = receiptHeight - 20; // Account for title text
+            const scale = Math.min(availableWidth / image.width, availableHeight / image.height);
+            const imgWidth = Math.round(image.width * scale);
+            const imgHeight = Math.round(image.height * scale);
+
+            receiptPage.drawImage(image, {
+              x: x + (receiptWidth - imgWidth) / 2,
+              y: y + (receiptHeight - 20 - imgHeight) / 2,
               width: imgWidth,
               height: imgHeight,
             });
-          };
-
-          if (blob.mimetype === 'image/jpeg' || blob.mimetype === 'image/png') {
-            await processAndDrawImage(blob.data, 'jpeg', '');
-          } else if (blob.mimetype === 'application/pdf') {
-            const pageCount = await this.ocrService.getPdfPageCount(blob.data);
-            for (let i = 1; i <= pageCount; i++) {
-              const imageBuffer = await this.ocrService.convertPdfPageToPng(blob.data, i);
-              await processAndDrawImage(imageBuffer, 'png', `(Page ${i}/${pageCount})`);
-            }
-          }
-        } catch (error) {
-          this.logger.error(`Could not attach receipt for expense ${expense.id}:`, error);
+            receiptCount++;
         }
-      }
     }
     
     const pages = pdfDoc.getPages();
